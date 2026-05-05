@@ -1,0 +1,2216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Live Agent Dashboard - Modern WhatsApp</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
+        }
+
+        :root {
+            --primary-color: #00d4aa;
+            --primary-dark: #00b894;
+            --primary-light: #e8fffe;
+            --success-color: #00e676;
+            --success-light: #e8f5e8;
+            --warning-color: #ffa726;
+            --warning-light: #fff8e1;
+            --error-color: #ff5722;
+            --error-light: #ffebee;
+            --text-primary: #1a202c;
+            --text-secondary: #4a5568;
+            --text-muted: #a0aec0;
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8fafc;
+            --bg-tertiary: #edf2f7;
+            --border-color: #e2e8f0;
+            --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            --radius-sm: 0.375rem;
+            --radius-md: 0.5rem;
+            --radius-lg: 0.75rem;
+            --radius-xl: 1rem;
+            --radius-2xl: 1.5rem;
+            --radius-full: 9999px;
+        }
+        
+        body { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh; 
+            overflow: hidden;
+            color: var(--text-primary);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        /* Header */
+        .header { 
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 1.25rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow-lg);
+            position: relative;
+            z-index: 100;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(0, 212, 170, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            z-index: -1;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+            border-radius: var(--radius-xl);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: var(--shadow-md);
+            animation: logoFloat 3s ease-in-out infinite;
+        }
+
+        @keyframes logoFloat {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-3px); }
+        }
+        
+        .header h1 { 
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0;
+        }
+        
+        .agent-info { 
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .agent-card {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.625rem 1.25rem;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: var(--radius-full);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+            transition: all 0.3s ease;
+        }
+
+        .agent-card:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .agent-avatar {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--success-color) 0%, #4caf50 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        
+        .status-indicator { 
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius-full);
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .status-indicator::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            transition: left 0.6s;
+        }
+
+        .status-indicator:hover::before {
+            left: 100%;
+        }
+        
+        .status-online { 
+            background: var(--success-light);
+            color: var(--success-color);
+            border: 1px solid rgba(0, 230, 118, 0.3);
+        }
+
+        .status-offline {
+            background: var(--error-light);
+            color: var(--error-color);
+            border: 1px solid rgba(255, 87, 34, 0.3);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.1); }
+        }
+        
+        .main-container { 
+            display: flex; 
+            height: calc(100vh - 88px); 
+            gap: 0; 
+        }
+        
+        /* Panel Base Styles */
+        .panel {
+            background: var(--bg-primary);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            box-shadow: var(--shadow-lg);
+            border-right: 1px solid var(--border-color);
+        }
+
+        .panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary-color), var(--primary-dark));
+            z-index: 1;
+        }
+
+        /* Left Panel - All Customers */
+        .customers-panel { 
+            width: 380px;
+            min-width: 320px;
+        }
+        
+        .customers-header { 
+            padding: 1.5rem;
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(255, 255, 255, 0.9) 100%);
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .customers-header h3 { 
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .customers-count {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            color: white;
+            padding: 0.25rem 0.625rem;
+            border-radius: var(--radius-full);
+            font-size: 12px;
+            font-weight: 600;
+            min-width: 24px;
+            text-align: center;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .search-box { 
+            width: 100%; 
+            padding: 0.875rem 1.25rem;
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-xl);
+            font-size: 14px;
+            background: var(--bg-primary);
+            transition: all 0.3s ease;
+            outline: none;
+            font-family: inherit;
+        }
+        
+        .search-box:focus { 
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.1);
+            transform: translateY(-1px);
+        }
+
+        .search-box::placeholder {
+            color: var(--text-muted);
+        }
+        
+        .customers-list { 
+            flex: 1; 
+            overflow-y: auto; 
+            background: var(--bg-primary);
+        }
+        
+        .customer-item { 
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            background: var(--bg-primary);
+        }
+
+        .customer-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 0;
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            transition: width 0.3s ease;
+        }
+        
+        .customer-item:hover { 
+            background: var(--bg-secondary);
+            transform: translateX(4px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .customer-item:hover::before {
+            width: 4px;
+        }
+        
+        .customer-item.active { 
+            background: var(--primary-light);
+            border-right: 4px solid var(--primary-color);
+            box-shadow: inset 0 0 0 1px rgba(0, 212, 170, 0.1);
+        }
+
+        .customer-item.active::before {
+            width: 4px;
+        }
+        
+        .customer-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 0.625rem;
+        }
+        
+        .customer-name { 
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .customer-time { 
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+        
+        .customer-vehicles { 
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+        
+        .customer-message { 
+            font-size: 13px;
+            color: var(--text-secondary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            line-height: 1.4;
+        }
+        
+        .unread-badge { 
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            color: white;
+            border-radius: 50%;
+            padding: 0.125rem 0.375rem;
+            font-size: 10px;
+            font-weight: 700;
+            min-width: 18px;
+            text-align: center;
+            box-shadow: var(--shadow-sm);
+            animation: bounceIn 0.6s ease;
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        
+        .active-indicator {
+            background: linear-gradient(135deg, var(--success-color), #4caf50);
+            color: white;
+            padding: 0.125rem 0.5rem;
+            border-radius: var(--radius-full);
+            font-size: 10px;
+            font-weight: 700;
+            animation: pulse 2s infinite;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        /* Middle Panel - Pending Customers */
+        .pending-panel { 
+            width: 420px;
+            min-width: 360px;
+        }
+        
+        .pending-header { 
+            padding: 1.5rem;
+            background: linear-gradient(135deg, var(--warning-light) 0%, rgba(255, 248, 225, 0.9) 100%);
+            border-bottom: 1px solid rgba(255, 167, 38, 0.2);
+        }
+        
+        .pending-header h3 { 
+            color: #b8860b;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .pending-count {
+            background: linear-gradient(135deg, var(--warning-color), #ff9800);
+            color: white;
+            padding: 0.25rem 0.625rem;
+            border-radius: var(--radius-full);
+            font-size: 12px;
+            font-weight: 600;
+            min-width: 24px;
+            text-align: center;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .pending-list { 
+            flex: 1; 
+            overflow-y: auto; 
+            padding: 1rem;
+            background: var(--bg-secondary);
+        }
+        
+        .pending-card { 
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-2xl);
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .pending-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--warning-color) 0%, #ffb74d 100%);
+        }
+        
+        .pending-card:hover { 
+            transform: translateY(-8px);
+            box-shadow: var(--shadow-xl);
+            border-color: var(--warning-color);
+        }
+        
+        .pending-info { 
+            margin-bottom: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 13px;
+        }
+        
+        .pending-info strong { 
+            color: var(--text-primary);
+            min-width: 80px;
+            font-weight: 600;
+        }
+        
+        .status-badge { 
+            padding: 0.25rem 0.75rem;
+            border-radius: var(--radius-full);
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .status-requested { 
+            background: var(--warning-light);
+            color: #b8860b;
+            border: 1px solid rgba(255, 167, 38, 0.3);
+        }
+
+        /* Media Styles */
+        .media-message {
+            max-width: 300px;
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            margin: 0.5rem 0;
+            box-shadow: var(--shadow-sm);
+        }
+        .media-image {
+            width: 100%;
+            height: auto;
+            display: block;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .media-image:hover {
+            transform: scale(1.02);
+        }
+        .media-document {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #1e293b;
+            padding: 12px 16px;
+            border-radius: 12px;
+            text-decoration: none;
+            color: #f8fafc;
+            font-weight: 600;
+            margin-top: 8px;
+            border: 1px solid #334155;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .media-document:hover {
+            background: #0f172a;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,212,170,0.4);
+            color: #00d4aa;
+        }
+
+        .media-document span:first-child {
+            filter: drop-shadow(0 0 2px rgba(255,255,255,0.2));
+        }
+        .attachment-btn {
+            background: none;
+            border: none;
+            font-size: 22px;
+            cursor: pointer;
+            color: var(--text-muted);
+            padding: 0 12px;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .attachment-btn:hover {
+            color: var(--primary-color);
+            transform: rotate(15deg);
+        }
+        .message.agent .media-document {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+        .message.agent .media-document:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="header-left">
+            <div class="logo">🤵</div>
+            <h1>Live Agent Dashboard</h1>
+        </div>
+        <div class="agent-info">
+            <div class="agent-card">
+                <div class="agent-avatar" id="agentAvatar">-</div>
+                <span style="font-weight: 600;" id="agentNameDisplay">Agent</span>
+            </div>
+            <div id="connectionStatus" class="status-indicator status-online">
+                <div class="status-dot"></div>
+                Connected
+            </div>
+            <button onclick="logoutAgent()" style="margin-left:12px;padding:8px 18px;background:#ff4757;color:white;border:none;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;">
+                🚪 Logout
+            </button>
+        </div>
+    </div>
+
+    <!-- Recovery Banner -->
+    <div id="recoveryBanner" class="recovery-banner">
+        <strong>System:</strong> <span id="recoveryMessage"></span>
+    </div>
+
+    <div class="main-container">
+        <!-- Left Panel - All Customers -->
+        <div class="customers-panel panel">
+            <div class="customers-header">
+                <h3>
+                    💬 All Customers
+                    <span id="totalCustomersCount" class="customers-count">0</span>
+                </h3>
+                <input type="text" id="customerSearch" class="search-box" placeholder="🔍 Search customers...">
+            </div>
+            <div id="customersList" class="customers-list">
+                <div style="text-align: center; padding: 3rem; color: var(--text-muted);">
+                    <div style="font-size: 48px; margin-bottom: 1rem; opacity: 0.5;">📱</div>
+                    <p style="font-size: 16px; font-weight: 500;">Loading customers...</p>
+                    <div style="margin-top: 1rem; height: 4px; background: var(--bg-tertiary); border-radius: 2px; overflow: hidden;">
+                        <div style="height: 100%; background: linear-gradient(90deg, var(--primary-color), var(--primary-dark)); border-radius: 2px; animation: shimmer 2s infinite;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Middle Panel - Pending Customers -->
+        <div class="pending-panel panel">
+            <div class="pending-header">
+                <h3>
+                    ⏳ Pending Requests
+                    <span id="pendingCount" class="pending-count">0</span>
+                </h3>
+            </div>
+            <div id="pendingList" class="pending-list">
+                <div style="text-align: center; padding: 3rem; color: var(--text-muted);">
+                    <div style="font-size: 48px; margin-bottom: 1rem; opacity: 0.5;">⏰</div>
+                    <p style="font-size: 16px; font-weight: 500;">No pending requests</p>
+                    <p style="font-size: 14px; margin-top: 0.5rem; opacity: 0.8;">New requests will appear here</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel - Live Chat -->
+        <div class="chat-panel panel">
+            <!-- Chat Header -->
+            <div id="chatHeader" class="chat-header hidden">
+                <div class="chat-customer-info">
+                    <h4 id="chatCustomerName">Customer Name</h4>
+                    <div id="chatCustomerDetails" class="chat-customer-details">🚗 Vehicles: Loading...</div>
+                </div>
+                <div class="chat-actions">
+                    <button id="newChatBtn" class="new-chat-btn" title="Start a new conversation with this customer">
+                        ✨ New Chat
+                    </button>
+                    <button id="endChatBtn" class="end-chat-btn" title="End current active chat">
+                        ❌ End Chat
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Chat History -->
+            <div id="chatHistory" class="chat-history hidden clearfix"></div>
+            
+            <!-- Chat Input -->
+            <div id="chatInputArea" class="chat-input-area hidden">
+                <div class="input-container">
+                    <button id="attachBtn" class="attachment-btn" title="Attach image or PDF">📎</button>
+                    <input type="file" id="fileInput" style="display: none;" accept="image/*,application/pdf">
+                    <textarea id="messageInput" class="chat-input" rows="1" placeholder="Type a message..." maxlength="1000"></textarea>
+                    <button id="sendBtn" class="send-btn">
+                        ➤
+                    </button>
+                </div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 0.5rem; text-align: right; font-weight: 500;">
+                    <span id="charCount">0</span>/1000 characters
+                </div>
+            </div>
+            
+            <!-- No Selection State -->
+            <div id="noSelection" class="no-selection">
+                <div class="no-selection-icon">💬</div>
+                <h3>Welcome to Agent Dashboard</h3>
+                <p>Select a customer from the left panel to start chatting</p>
+                <p style="margin-top: 0.75rem; font-size: 14px; opacity: 0.7;">
+                    Or accept a pending request from the middle panel
+                </p>
+            </div>
+        </div>
+    </div>
+        <script>
+        // Keep ALL your existing JavaScript code exactly as is - only the HTML/CSS styling has been modernized
+        // Your existing JavaScript functionality remains completely unchanged
+        
+        const agentId = parseInt(window.location.pathname.split("/").pop());
+        document.getElementById("agentAvatar").textContent = agentId;
+        document.getElementById("agentNameDisplay").textContent = "Agent " + agentId;
+
+        async function logoutAgent() {
+            if (!confirm("Are you sure you want to logout?")) return;
+            try { await fetch('/agent/logout', { method: 'POST' }); } catch(e) {}
+            window.location.href = '/agent/login';
+        }
+        let currentCustomerPhone = null;
+        let currentHandoffId = null;
+        let chatInterval = null;
+        let heartbeatInterval = null;
+        let allCustomers = [];
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            startHeartbeat();
+            loadAllCustomers();
+            loadPendingCustomers();
+            setupEventListeners();
+            
+            // Auto refresh
+            setInterval(loadAllCustomers, 8000);   // Every 8 seconds
+            setInterval(loadPendingCustomers, 5000); // Every 5 seconds
+        });
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Search functionality
+            document.getElementById('customerSearch').addEventListener('input', function() {
+                filterCustomers(this.value);
+            });
+
+            // Send message events
+            document.getElementById('sendBtn').addEventListener('click', sendMessage);
+            document.getElementById('messageInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+
+            // Chat actions - ENHANCED WITH NEW CHAT BUTTON
+            document.getElementById('endChatBtn').addEventListener('click', endCurrentChat);
+            document.getElementById('newChatBtn').addEventListener('click', startNewChatWithCustomer);
+
+            // Character counter
+            document.getElementById('messageInput').addEventListener('input', function() {
+                document.getElementById('charCount').textContent = this.value.length;
+            });
+
+            // Attachment button events
+            const attachBtn = document.getElementById('attachBtn');
+            const fileInput = document.getElementById('fileInput');
+            
+            attachBtn.addEventListener('click', () => fileInput.click());
+            
+            fileInput.addEventListener('change', async function() {
+                if (this.files && this.files[0]) {
+                    const file = this.files[0];
+                    // Validate file size (e.g. 10MB)
+                    if (file.size > 10 * 1024 * 1024) {
+                        showRecoveryMessage('File too large. Max 10MB allowed.', 'error');
+                        this.value = '';
+                        return;
+                    }
+                    
+                    const mediaType = file.type.startsWith('image/') ? 'image' : 'document';
+                    const caption = prompt(`Enter a caption for this ${mediaType} (optional):`, "");
+                    
+                    if (caption === null) {
+                        this.value = '';
+                        return; // User cancelled
+                    }
+                    
+                    await uploadMedia(file, mediaType, caption);
+                    this.value = ''; // Reset input
+                }
+            });
+        }
+
+        async function uploadMedia(file, mediaType, caption) {
+            if (!currentHandoffId) {
+                showRecoveryMessage('No active chat session to send files.', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('agent_id', agentId);
+            formData.append('handoff_id', currentHandoffId);
+            formData.append('media_type', mediaType);
+            formData.append('caption', caption || '');
+            formData.append('file', file);
+
+            try {
+                showRecoveryMessage(`📤 Uploading ${mediaType}...`, 'success');
+                const response = await fetch('/agent/api/send-media', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    showRecoveryMessage('✅ File sent successfully!', 'success');
+                    loadCustomerChatHistory(currentCustomerPhone);
+                } else {
+                    showRecoveryMessage('Error uploading file: ' + result.message, 'error');
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                showRecoveryMessage('Error uploading file.', 'error');
+            }
+        }
+
+        // NEW FUNCTION: Start new chat with selected customer
+        async function startNewChatWithCustomer() {
+            if (!currentCustomerPhone) {
+                showRecoveryMessage('Please select a customer first', 'warning');
+                return;
+            }
+
+            // Show loading state
+            const newChatBtn = document.getElementById('newChatBtn');
+            const originalText = newChatBtn.textContent;
+            newChatBtn.textContent = '⏳ Starting...';
+            newChatBtn.disabled = true;
+
+            try {
+                const response = await fetch('/agent/api/start-new-chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        agent_id: agentId,
+                        phone_number: currentCustomerPhone
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    currentHandoffId = result.handoff_id;
+                    showRecoveryMessage('✅ New chat started! Customer has been notified.', 'success');
+                    
+                    // Refresh chat and customer list
+                    setTimeout(() => {
+                        loadCustomerChatHistory(currentCustomerPhone);
+                        loadAllCustomers();
+                        updateChatButtons();
+                    }, 1000);
+                } else {
+                    showRecoveryMessage('Failed to start new chat: ' + result.error, 'error');
+                }
+            } catch (error) {
+                console.error('Error starting new chat:', error);
+                showRecoveryMessage('Error starting new chat', 'error');
+            } finally {
+                // Restore button state
+                newChatBtn.textContent = originalText;
+                newChatBtn.disabled = false;
+            }
+        }
+
+        // ENHANCED: Update chat buttons with better logic
+        function updateChatButtons() {
+            const sendBtn = document.getElementById('sendBtn');
+            const endChatBtn = document.getElementById('endChatBtn');
+            const newChatBtn = document.getElementById('newChatBtn');
+            const messageInput = document.getElementById('messageInput');
+            
+            if (!currentCustomerPhone) {
+                // No customer selected
+                sendBtn.disabled = true;
+                endChatBtn.style.display = 'none';
+                newChatBtn.style.display = 'none';
+                messageInput.placeholder = 'Select a customer to start messaging...';
+                return;
+            }
+
+            // Customer selected - show appropriate buttons
+            if (currentHandoffId) {
+                // ACTIVE CHAT SESSION - SHOW END CHAT BUTTON
+                sendBtn.disabled = false;
+                newChatBtn.style.display = 'none';  // HIDE New Chat
+                endChatBtn.style.display = 'inline-flex';  // SHOW End Chat
+                messageInput.placeholder = 'Type your message... (Active chat)';
+                
+                // Show active status
+                updateChatStatus('active', 'Chat Active');
+            } else {
+                // NO ACTIVE CHAT - SHOW NEW CHAT BUTTON
+                sendBtn.disabled = true;
+                newChatBtn.style.display = 'inline-flex';  // SHOW New Chat
+                endChatBtn.style.display = 'none';  // HIDE End Chat
+                newChatBtn.textContent = '💬 Start Chat';
+                newChatBtn.title = 'Start new conversation with this customer';
+                messageInput.placeholder = 'Click "Start Chat" to begin messaging...';
+                
+                // Show ready status
+                updateChatStatus('ready', 'Ready to Chat');
+            }
+        }
+
+        // NEW FUNCTION: Update chat status indicator
+        function updateChatStatus(status, text) {
+            let statusIndicator = document.getElementById('chatStatusIndicator');
+            
+            if (!statusIndicator) {
+                // Create status indicator if it doesn't exist
+                statusIndicator = document.createElement('span');
+                statusIndicator.id = 'chatStatusIndicator';
+                statusIndicator.className = 'chat-status-indicator';
+                document.getElementById('chatCustomerDetails').appendChild(statusIndicator);
+            }
+            
+            statusIndicator.className = `chat-status-indicator status-${status}`;
+            statusIndicator.textContent = text;
+        }
+
+        // Start heartbeat
+        function startHeartbeat() {
+            heartbeatInterval = setInterval(async () => {
+                try {
+                    await fetch(`/agent/api/heartbeat/${agentId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    updateConnectionStatus(true);
+                } catch (error) {
+                    updateConnectionStatus(false);
+                }
+            }, 30000);
+        }
+
+        function updateConnectionStatus(isConnected) {
+            const statusEl = document.getElementById('connectionStatus');
+            if (isConnected) {
+                statusEl.innerHTML = '<div class="status-dot"></div>Connected';
+                statusEl.className = 'status-indicator status-online';
+            } else {
+                statusEl.innerHTML = '<div class="status-dot"></div>Disconnected';
+                statusEl.className = 'status-indicator status-offline';
+            }
+        }
+
+        // Load all customers
+        async function loadAllCustomers() {
+            try {
+                const response = await fetch(`/agent/api/all-customers/${agentId}`);
+                const data = await response.json();
+                allCustomers = data.customers || [];
+                displayAllCustomers(allCustomers);
+            } catch (error) {
+                console.error('Error loading customers:', error);
+                showRecoveryMessage('Error loading customers', 'error');
+            }
+        }
+
+        // Display all customers
+        function displayAllCustomers(customers) {
+            const container = document.getElementById('customersList');
+            const countEl = document.getElementById('totalCustomersCount');
+            
+            countEl.textContent = customers.length;
+
+            if (customers.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 3rem; color: var(--text-muted);">
+                        <div style="font-size: 48px; margin-bottom: 1rem; opacity: 0.5;">📱</div>
+                        <p style="font-size: 16px; font-weight: 500;">No customers yet</p>
+                        <p style="font-size: 14px; margin-top: 0.5rem; opacity: 0.8;">Customers will appear here after first chat</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = customers.map(customer => `
+                <div class="customer-item ${currentCustomerPhone === customer.phone_number ? 'active' : ''}" 
+                     onclick="selectCustomer('${customer.phone_number}')">
+                    <div class="customer-header">
+                        <div class="customer-name">📞 ${customer.phone_number}</div>
+                        <div class="customer-time">
+                            ${formatTime(customer.last_message_time || customer.last_connected)}
+                            ${customer.active_chats > 0 ? '<span class="active-indicator">LIVE</span>' : ''}
+                        </div>
+                    </div>
+                    <div class="customer-vehicles">🚗 ${customer.display_vehicles}</div>
+                    <div class="customer-message">
+                        <span>${customer.last_message || 'No messages yet'}</span>
+                        ${customer.unread_count > 0 ? `<span class="unread-badge">${customer.unread_count}</span>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Filter customers
+        function filterCustomers(query) {
+            const filtered = allCustomers.filter(customer => 
+                customer.phone_number.toLowerCase().includes(query.toLowerCase()) ||
+                (customer.display_vehicles && customer.display_vehicles.toLowerCase().includes(query.toLowerCase())) ||
+                (customer.last_message && customer.last_message.toLowerCase().includes(query.toLowerCase()))
+            );
+            displayAllCustomers(filtered);
+        }
+
+        // Select customer
+        async function selectCustomer(phoneNumber) {
+            if (currentCustomerPhone === phoneNumber) return;
+
+            currentCustomerPhone = phoneNumber;
+            currentHandoffId = null;
+            
+            // Update UI
+            document.querySelectorAll('.customer-item').forEach(item => item.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            
+            // Mark messages as read
+            await markMessagesRead(phoneNumber);
+            
+            // Load chat history
+            await loadCustomerChatHistory(phoneNumber);
+            
+            // Show chat interface
+            showChatInterface(phoneNumber);
+        }
+
+        // Load customer chat history - FIXED VERSION
+        async function loadCustomerChatHistory(phoneNumber) {
+            try {
+                const response = await fetch(`/agent/api/customer-full-chat/${agentId}/${phoneNumber}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    showRecoveryMessage('Error loading chat: ' + data.error, 'error');
+                    return;
+                }
+
+                // Check if we have handoffs data (new API response format)
+                if (data.handoffs && data.allmessages) {
+                    // NEW FORMAT: Multiple handoffs with all messages
+                    const activeHandoff = data.handoffs.find(h => h.status === 'connected');
+                    
+                    if (activeHandoff) {
+                        currentHandoffId = activeHandoff.id;
+                    } else {
+                        currentHandoffId = null;
+                    }
+                    
+                    // Display using the new format
+                    displayMessagesInChatNew(data.handoffs, data.allmessages);
+                } 
+                // Fallback to old format
+                else if (data.handoff) {
+                    // OLD FORMAT: Single handoff with live_messages
+                    if (data.handoff.status === 'connected') {
+                        currentHandoffId = data.handoff.id;
+                    } else {
+                        currentHandoffId = null;
+                    }
+                    
+                    // Display using old format
+                    displayMessagesInChat(data.handoff, data.live_messages || []);
+                }
+                else {
+                    // No chat history
+                    document.getElementById('chatHistory').innerHTML = `
+                        <div class="message system clearfix">
+                            <div style="text-align: center; padding: 2rem; background: var(--bg-secondary); border-radius: var(--radius-xl); backdrop-filter: blur(10px);">
+                                <h3 style="color: var(--success-color); margin-bottom: 1rem; font-size: 20px;">💬 Ready to Start Chatting</h3>
+                                <p style="color: var(--text-secondary); font-size: 16px;">No previous conversation with this customer.</p>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                console.error('Error loading customer chat:', error);
+                showRecoveryMessage('Error loading customer chat', 'error');
+            }
+        }
+
+        // NEW FUNCTION: Display messages for multiple handoffs
+        function displayMessagesInChatNew(handoffs, allMessages) {
+            const chatHistory = document.getElementById('chatHistory');
+            let historyHtml = '';
+
+            if (!handoffs || handoffs.length === 0) {
+                historyHtml = `
+                    <div class="message system clearfix">
+                        <div style="text-align: center; padding: 2rem; background: var(--bg-secondary); border-radius: var(--radius-xl); backdrop-filter: blur(10px);">
+                            <h3 style="color: var(--success-color); margin-bottom: 1rem; font-size: 20px;">💬 Ready to Start Chatting</h3>
+                            <p style="color: var(--text-secondary); font-size: 16px;">No previous conversation with this customer.</p>
+                        </div>
+                    </div>
+                `;
+                chatHistory.innerHTML = historyHtml;
+                return;
+            }
+
+            // Display each handoff session
+            handoffs.forEach((handoff, index) => {
+                const statusColor = handoff.status === 'connected' ? 'var(--success-color)' : 'var(--text-muted)';
+                const statusIcon = handoff.status === 'connected' ? '🟢' : '⚪';
+                
+                // Session header
+                historyHtml += `
+                    <div class="message system clearfix">
+                        <div style="background: linear-gradient(135deg, var(--primary-light), rgba(224, 248, 255, 0.9)); border: 2px solid var(--primary-color); padding: 1.5rem; margin: 1rem 0; border-radius: var(--radius-xl); backdrop-filter: blur(10px);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                                <strong style="color: var(--primary-dark); font-size: 16px; font-weight: 700;">📅 Chat Session ${index + 1}</strong>
+                                <span style="color: ${statusColor}; font-weight: 700;">${statusIcon} ${handoff.status.toUpperCase()}</span>
+                            </div>
+                            <div style="color: var(--text-primary); line-height: 1.6; font-size: 14px;">
+                                <strong>Started:</strong> ${handoff.connected_timestamp || handoff.request_timestamp}<br>
+                                ${handoff.completed_timestamp ? `<strong>Ended:</strong> ${handoff.completed_timestamp}<br>` : ''}
+                                ${handoff.vehicle_reg ? `<strong>Vehicle:</strong> ${handoff.vehicle_reg}<br>` : ''}
+                                <strong>Reason:</strong> ${handoff.handoff_reason || 'Direct message'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Show AI conversation history if available
+                if (handoff.ai_conversation_history) {
+                    historyHtml += `
+                        <div class="message system clearfix">
+                            <div style="background: var(--bg-secondary); border-left: 4px solid var(--primary-color); padding: 1.5rem; margin: 1rem 0; border-radius: var(--radius-lg); backdrop-filter: blur(10px);">
+                                <strong style="color: var(--primary-color); font-size: 14px; font-weight: 700;">🤖 AI Conversation History:</strong><br><br>
+                                <div style="font-size: 13px; line-height: 1.6;">${handoff.ai_conversation_history.replace(/\\n/g, '<br>')}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Show messages for this handoff
+                const handoffMessages = allMessages.filter(msg => msg.handoff_id === handoff.id);
+                if (handoffMessages && handoffMessages.length > 0) {
+                    handoffMessages.forEach(msg => {
+                        const messageClass = msg.sender_type === 'customer' ? 'customer' : 
+                                        msg.sender_type === 'agent' ? 'agent' : 'system';
+                        const senderIcon = msg.sender_type === 'customer' ? '👤' : 
+                                        msg.sender_type === 'agent' ? '🤵' : '⚙️';
+                        const senderName = msg.sender_type === 'customer' ? 'Customer' : 
+                                        msg.sender_type === 'agent' ? (msg.sender_name || 'Agent') : 'System';
+                        
+                        let contentHtml = msg.message_text ? msg.message_text.replace(/\\n/g, '<br>') : '';
+                        const detectedType1 = msg.message_type || (msg.media_url ? (/\.(jpg|jpeg|png|gif|webp)$/i.test(msg.media_url) ? 'image' : 'document') : 'text');
+                        if (detectedType1 === 'image' && msg.media_url) {
+                            contentHtml = `
+                                <div class="media-message">
+                                    <img src="${msg.media_url}" class="media-image" onclick="window.open('${msg.media_url}')" onerror="this.outerHTML='<a href=\'${msg.media_url}\' target=\'_blank\'>📷 Open Image</a>'">
+                                </div>
+                                ${msg.message_text ? `<div style="margin-top:5px;">${msg.message_text}</div>` : ''}
+                            `;
+                        } else if (detectedType1 === 'document' && msg.media_url) {
+                            const fileName = msg.media_url.split('/').pop().split('_').slice(1).join('_') || 'Document';
+                            contentHtml = `
+                                <a href="${msg.media_url}" target="_blank" class="media-document">
+                                    <span style="font-size: 20px;">📄</span>
+                                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${fileName}</span>
+                                </a>
+                                ${(msg.message_text && msg.message_text !== fileName) ? `<div style="margin-top:8px; font-weight: 500;">${msg.message_text}</div>` : ''}
+                            `;
+                        } else if (!msg.message_text && msg.media_url) {
+                            contentHtml = `<a href="${msg.media_url}" target="_blank">📎 Open Attachment</a>`;
+                        }
+
+                        historyHtml += `
+                            <div class="message ${messageClass} clearfix">
+                                <div class="message-sender">${senderIcon} ${senderName}</div>
+                                <div style="font-size: 14px; line-height: 1.5;">${contentHtml}</div>
+                                <div class="message-time">${msg.timestamp}</div>
+                            </div>
+                        `;
+                    });
+                }
+            });
+
+            chatHistory.innerHTML = historyHtml;
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        // Display messages in chat - CLEANED UP VERSION (REMOVED HELPER MESSAGES)
+        function displayMessagesInChat(handoff, liveMessages) {
+            const chatHistory = document.getElementById('chatHistory');
+            let historyHtml = '';
+
+            if (!handoff && (!liveMessages || liveMessages.length === 0)) {
+                historyHtml = `
+                    <div class="message system clearfix">
+                        <div style="text-align: center; padding: 2rem; background: var(--bg-secondary); border-radius: var(--radius-xl); backdrop-filter: blur(10px);">
+                            <h3 style="color: var(--success-color); margin-bottom: 1rem; font-size: 20px;">💬 Ready to Start Chatting</h3>
+                            <p style="color: var(--text-secondary); font-size: 16px;">No previous conversation with this customer.</p>
+                        </div>
+                    </div>
+                `;
+                chatHistory.innerHTML = historyHtml;
+                return;
+            }
+
+            if (handoff) {
+                // Show session header
+                const statusColor = handoff.status === 'connected' ? 'var(--success-color)' : 'var(--text-muted)';
+                const statusIcon = handoff.status === 'connected' ? '🟢' : '⚪';
+                
+                historyHtml += `
+                    <div class="message system clearfix">
+                        <div style="background: linear-gradient(135deg, var(--primary-light), rgba(224, 248, 255, 0.9)); border: 2px solid var(--primary-color); padding: 1.5rem; margin: 1rem 0; border-radius: var(--radius-xl); backdrop-filter: blur(10px);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                                <strong style="color: var(--primary-dark); font-size: 16px; font-weight: 700;">📅 Chat Session</strong>
+                                <span style="color: ${statusColor}; font-weight: 700;">${statusIcon} ${handoff.status.toUpperCase()}</span>
+                            </div>
+                            <div style="color: var(--text-primary); line-height: 1.6; font-size: 14px;">
+                                <strong>Started:</strong> ${handoff.connected_timestamp}<br>
+                                ${handoff.completed_timestamp ? `<strong>Ended:</strong> ${handoff.completed_timestamp}<br>` : ''}
+                                ${handoff.vehicle_reg ? `<strong>Vehicle:</strong> ${handoff.vehicle_reg}<br>` : ''}
+                                <strong>Reason:</strong> ${handoff.handoff_reason || 'Direct message'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Show AI conversation history if available
+                if (handoff.ai_conversation_history) {
+                    historyHtml += `
+                        <div class="message system clearfix">
+                            <div style="background: var(--bg-secondary); border-left: 4px solid var(--primary-color); padding: 1.5rem; margin: 1rem 0; border-radius: var(--radius-lg); backdrop-filter: blur(10px);">
+                                <strong style="color: var(--primary-color); font-size: 14px; font-weight: 700;">🤖 Previous AI Conversation:</strong><br><br>
+                                <div style="font-size: 13px; line-height: 1.6;">${handoff.ai_conversation_history.replace(/\\n/g, '<br>')}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Set current handoff ID if active
+                if (handoff.status === 'connected') {
+                    currentHandoffId = handoff.id;
+                }
+            }
+
+            // Show live chat messages
+            if (liveMessages && liveMessages.length > 0) {
+                liveMessages.forEach(msg => {
+                    const messageClass = msg.sender_type === 'customer' ? 'customer' : 
+                                       msg.sender_type === 'agent' ? 'agent' : 'system';
+                    const senderIcon = msg.sender_type === 'customer' ? '👤' : 
+                                     msg.sender_type === 'agent' ? '🤵' : '⚙️';
+                    const senderName = msg.sender_type === 'customer' ? 'Customer' : 
+                                     msg.sender_type === 'agent' ? (msg.sender_name || 'Agent') : 'System';
+                    
+                    let contentHtml = msg.message_text ? msg.message_text.replace(/\\n/g, '<br>') : '';
+                    const detectedType2 = msg.message_type || (msg.media_url ? (/\.(jpg|jpeg|png|gif|webp)$/i.test(msg.media_url) ? 'image' : 'document') : 'text');
+                    if (detectedType2 === 'image' && msg.media_url) {
+                        contentHtml = `
+                            <div class="media-message">
+                                <img src="${msg.media_url}" class="media-image" onclick="window.open('${msg.media_url}')" onerror="this.outerHTML='<a href=\'${msg.media_url}\' target=\'_blank\'>📷 Open Image</a>'">
+                            </div>
+                            ${msg.message_text ? `<div style="margin-top:5px;">${msg.message_text}</div>` : ''}
+                        `;
+                    } else if (detectedType2 === 'document' && msg.media_url) {
+                        const fileName = msg.media_url.split('/').pop().split('_').slice(1).join('_') || 'Document';
+                        contentHtml = `
+                            <a href="${msg.media_url}" target="_blank" class="media-document">
+                                <span style="font-size: 20px;">📄</span>
+                                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${fileName}</span>
+                            </a>
+                            ${(msg.message_text && msg.message_text !== fileName) ? `<div style="margin-top:8px; font-weight: 500;">${msg.message_text}</div>` : ''}
+                        `;
+                    } else if (!msg.message_text && msg.media_url) {
+                        contentHtml = `<a href="${msg.media_url}" target="_blank">📎 Open Attachment</a>`;
+                    }
+
+                    historyHtml += `
+                        <div class="message ${messageClass} clearfix">
+                            <div class="message-sender">${senderIcon} ${senderName}</div>
+                            <div style="font-size: 14px; line-height: 1.5;">${contentHtml}</div>
+                            <div class="message-time">${msg.timestamp}</div>
+                        </div>
+                    `;
+                });
+            }
+
+            chatHistory.innerHTML = historyHtml;
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        // ENHANCED: Show chat interface with better status handling
+        function showChatInterface(phoneNumber) {
+            document.getElementById('noSelection').classList.add('hidden');
+            document.getElementById('chatHeader').classList.remove('hidden');
+            document.getElementById('chatHistory').classList.remove('hidden');
+            document.getElementById('chatInputArea').classList.remove('hidden');
+            
+            document.getElementById('chatCustomerName').textContent = phoneNumber;
+            
+            // Get vehicle info from selected customer
+            const customer = allCustomers.find(c => c.phone_number === phoneNumber);
+            if (customer) {
+                document.getElementById('chatCustomerDetails').innerHTML = `
+                    🚗 Vehicles: ${customer.display_vehicles}
+                    <span id="chatStatusIndicator" class="chat-status-indicator"></span>
+                `;
+            }
+            
+            // Update buttons based on current state
+            updateChatButtons();
+            
+            // Start polling for new messages
+            if (chatInterval) clearInterval(chatInterval);
+            chatInterval = setInterval(() => {
+                if (currentCustomerPhone) {
+                    loadCustomerChatHistory(currentCustomerPhone);
+                }
+            }, 3000);
+        }
+
+        // Send message
+        async function sendMessage() {
+            const messageInput = document.getElementById('messageInput');
+            const message = messageInput.value.trim();
+            
+            if (!message) {
+                showRecoveryMessage('Please enter a message', 'warning');
+                return;
+            }
+            
+            if (!currentCustomerPhone) {
+                showRecoveryMessage('Please select a customer first', 'warning');
+                return;
+            }
+
+            if (!currentHandoffId) {
+                showRecoveryMessage('No active chat session. Please click "Start Chat" first.', 'warning');
+                return;
+            }
+
+            // Show sending state
+            const sendBtn = document.getElementById('sendBtn');
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '⏳';
+
+            try {
+                const response = await fetch('/agent/api/send-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        agent_id: agentId,
+                        handoff_id: currentHandoffId,
+                        message: message
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    messageInput.value = '';
+                    document.getElementById('charCount').textContent = '0';
+                    showRecoveryMessage('Message sent successfully!', 'success');
+                    
+                    // Refresh will happen automatically via interval
+                    setTimeout(() => {
+                        loadCustomerChatHistory(currentCustomerPhone);
+                    }, 500);
+                } else {
+                    showRecoveryMessage('Failed to send message: ' + result.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+                showRecoveryMessage('Error sending message', 'error');
+            } finally {
+                // Restore send button
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = '➤';
+            }
+        }
+
+        // Mark messages as read
+        async function markMessagesRead(phoneNumber) {
+            try {
+                await fetch('/agent/api/mark-messages-read', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        phone_number: phoneNumber,
+                        agent_id: agentId
+                    })
+                });
+                loadAllCustomers(); // Refresh to update unread counts
+            } catch (error) {
+                console.error('Error marking messages read:', error);
+            }
+        }
+
+        // End current chat
+        async function endCurrentChat() {
+            if (!currentHandoffId) {
+                showRecoveryMessage('No active chat to end', 'warning');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to end this chat? Control will return to AI.')) return;
+
+            try {
+                const response = await fetch('/agent/api/end-chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        agent_id: agentId,
+                        handoff_id: currentHandoffId
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    // CLEAR CURRENT HANDOFF BUT KEEP CUSTOMER SELECTED
+                    currentHandoffId = null;
+                    
+                    // UPDATE BUTTONS TO SHOW "NEW CHAT" AGAIN
+                    updateChatButtons();
+                    
+                    showRecoveryMessage('Chat ended successfully. Control returned to AI.', 'success');
+                    
+                    setTimeout(() => {
+                        if (currentCustomerPhone) {
+                            loadCustomerChatHistory(currentCustomerPhone);  // REFRESH CHAT HISTORY
+                        }
+                        loadAllCustomers();  // REFRESH CUSTOMER LIST
+                    }, 1000);
+                } else {
+                    showRecoveryMessage('Failed to end chat: ' + result.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error ending chat:', error);
+                showRecoveryMessage('Error ending chat', 'error');
+            }
+        }
+
+        // Load pending customers
+        async function loadPendingCustomers() {
+            try {
+                const response = await fetch(`/agent/api/pending-customers/${agentId}`);
+                const customers = await response.json();
+                displayPendingCustomers(customers);
+            } catch (error) {
+                console.error('Error loading pending customers:', error);
+            }
+        }
+
+        // Display pending customers
+        function displayPendingCustomers(customers) {
+            const container = document.getElementById('pendingList');
+            const countEl = document.getElementById('pendingCount');
+            
+            countEl.textContent = customers.length;
+
+            if (customers.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 3rem; color: var(--text-muted);">
+                        <div style="font-size: 48px; margin-bottom: 1rem; opacity: 0.5;">✅</div>
+                        <p style="font-size: 16px; font-weight: 500;">No pending requests</p>
+                        <p style="font-size: 14px; margin-top: 0.5rem; opacity: 0.8;">New requests will appear here</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = customers.map(customer => {
+                const images = customer.uploaded_images || [];
+                let imagesHtml = '';
+                if (images.length > 0) {
+                    imagesHtml = `
+                        <div class="pending-info" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+                            <strong>📸 Uploaded Images (${images.length})${customer.image_service_type ? ' — ' + customer.image_service_type : ''}:</strong>
+                            <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;">
+                                ${images.map(img => `
+                                    <a href="${img.url}" target="_blank" title="${img.filename}">
+                                        <img src="${img.url}"
+                                             style="width: 64px; height: 64px; object-fit: cover; border-radius: 8px;
+                                                    border: 2px solid var(--primary-color); cursor: pointer;
+                                                    transition: transform 0.2s, box-shadow 0.2s;"
+                                             onmouseover="this.style.transform='scale(1.15)'; this.style.boxShadow='0 4px 15px rgba(0,212,170,0.5)'"
+                                             onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none'"
+                                             onerror="this.parentElement.style.display='none'"/>
+                                    </a>
+                                `).join('')}
+                            </div>
+                            ${customer.image_upload_time ? `<span style="font-size: 11px; color: var(--text-muted);">Uploaded: ${customer.image_upload_time}</span>` : ''}
+                        </div>
+                    `;
+                }
+
+                return `
+                <div class="pending-card">
+                    <div class="pending-info">
+                        <strong>📞 Phone:</strong> <span style="font-weight: 500;">${customer.phonenumber || 'Not provided'}</span>
+                    </div>
+                    <div class="pending-info">
+                        <strong>🚗 Vehicle:</strong> <span style="font-weight: 500;">${customer.vehiclereg || 'Not provided'}</span>
+                    </div>
+                    <div class="pending-info">
+                        <strong>🕒 Time:</strong> <span style="font-weight: 500;">${customer.requesttimestamp || 'Not available'}</span>
+                    </div>
+                    <div class="pending-info">
+                        <strong>💭 Reason:</strong> <span style="font-weight: 500;">${customer.handoffreason || 'Not specified'}</span>
+                    </div>
+                    <div class="pending-info">
+                        <strong>📊 Status:</strong>
+                        <span class="status-badge status-${customer.status}">${customer.status.toUpperCase()}</span>
+                    </div>
+                    ${imagesHtml}
+                    <div class="pending-actions">
+                        <button class="btn btn-success" onclick="acceptCustomer(${customer.id})">
+                            ✅ Accept
+                        </button>
+                        <button class="btn btn-primary" onclick="viewAIHistory(${customer.id})">
+                            📖 AI History
+                        </button>
+                    </div>
+                </div>
+            `}).join('');
+        }
+
+        // Accept customer
+        async function acceptCustomer(handoffId) {
+            try {
+                const response = await fetch('/agent/api/accept-customer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ agent_id: agentId, handoff_id: handoffId })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    showRecoveryMessage('Customer accepted! Chat is now active.', 'success');
+                    
+                    // GET CUSTOMER PHONE NUMBER AND SELECT THEM IN LIVE CHAT
+                    try {
+                        const chatResponse = await fetch(`/agent/api/chat-history/${handoffId}`);
+                        const chatData = await chatResponse.json();
+                        
+                        if (chatData.handoff && chatData.handoff.phone_number) {
+                            const phoneNumber = chatData.handoff.phone_number;
+                            currentHandoffId = handoffId;  // SET ACTIVE HANDOFF
+                            
+                            // SELECT THE CUSTOMER IN LEFT PANEL
+                            currentCustomerPhone = phoneNumber;
+                            
+                            // UPDATE UI TO SHOW THE CUSTOMER AS SELECTED
+                            document.querySelectorAll('.customer-item').forEach(item => {
+                                item.classList.remove('active');
+                                if (item.onclick && item.onclick.toString().includes(phoneNumber)) {
+                                    item.classList.add('active');
+                                }
+                            });
+                            
+                            // LOAD AND SHOW CHAT IN LIVE PANEL
+                            await loadCustomerChatHistory(phoneNumber);
+                            showChatInterface(phoneNumber);
+                        }
+                    } catch (error) {
+                        console.error('Error loading accepted customer chat:', error);
+                    }
+                    
+                    setTimeout(() => {
+                        loadPendingCustomers();
+                        loadAllCustomers();
+                    }, 1000);
+                } else {
+                    showRecoveryMessage('Failed to accept customer: ' + result.message, 'error');
+                }
+            } catch (error) {
+                showRecoveryMessage('Error accepting customer', 'error');
+            }
+        }        
+
+        // View AI history - FIXED VERSION
+        async function viewAIHistory(handoffId) {
+            try {
+                const response = await fetch(`/agent/api/chat-history/${handoffId}`);
+                const data = await response.json();
+                
+                // Check both possible field names for AI history
+                const aiHistory = data.handoff && (data.handoff.aiconversationhistory || data.handoff.ai_conversation_history);
+                
+                if (aiHistory) {
+                    const historyWindow = window.open('', '_blank', 'width=800,height=600,scrollbars=yes');
+                    historyWindow.document.write(`
+                        <html>
+                            <head>
+                                <title>AI Conversation History</title>
+                                <style>
+                                    body { 
+                                        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+                                        padding: 2rem; 
+                                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                        min-height: 100vh;
+                                        margin: 0;
+                                    }
+                                    .container { 
+                                        background: rgba(255, 255, 255, 0.95);
+                                        backdrop-filter: blur(20px);
+                                        padding: 2rem; 
+                                        border-radius: 1rem; 
+                                        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+                                        border: 1px solid rgba(255, 255, 255, 0.2);
+                                    }
+                                    h2 { 
+                                        color: #00d4aa; 
+                                        border-bottom: 2px solid #00d4aa; 
+                                        padding-bottom: 0.75rem; 
+                                        margin-bottom: 1.5rem;
+                                        font-size: 24px;
+                                        font-weight: 700;
+                                    }
+                                    pre { 
+                                        white-space: pre-wrap; 
+                                        background: rgba(248, 250, 252, 0.8);
+                                        padding: 1.5rem; 
+                                        border-radius: 0.75rem; 
+                                        border-left: 4px solid #00d4aa; 
+                                        line-height: 1.6;
+                                        font-size: 14px;
+                                        margin: 0;
+                                        backdrop-filter: blur(10px);
+                                    }
+                                </style>
+                            </head>
+                            <body>
+                                <div class="container">
+                                    <h2>🤖 AI Conversation History</h2>
+                                    <pre>${aiHistory}</pre>
+                                </div>
+                            </body>
+                        </html>
+                    `);
+                } else {
+                    alert('No AI conversation history available');
+                }
+            } catch (error) {
+                alert('Error loading history');
+                console.error('Error loading AI history:', error);
+            }
+        }
+
+        // Show recovery message
+        function showRecoveryMessage(message, type = 'success') {
+            const banner = document.getElementById('recoveryBanner');
+            document.getElementById('recoveryMessage').textContent = message;
+            banner.className = `recovery-banner ${type} show`;
+            
+            setTimeout(() => {
+                banner.classList.remove('show');
+            }, 4000);
+        }
+
+        // Format time
+        function formatTime(timestamp) {
+            if (!timestamp) return '';
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diffTime = Math.abs(now - date);
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (diffDays === 0) {
+                return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            } else if (diffDays === 1) {
+                return 'Yesterday';
+            } else if (diffDays < 7) {
+                return date.toLocaleDateString('en-US', { weekday: 'short' });
+            } else {
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            }
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            if (chatInterval) clearInterval(chatInterval);
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
+        });
+    </script>
+
+    <style>
+        .pending-actions {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .btn { 
+            padding: 0.625rem 1.25rem;
+            border: none;
+            border-radius: var(--radius-lg);
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            outline: none;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .btn:hover { 
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn-success { 
+            background: linear-gradient(135deg, var(--success-color) 0%, #4caf50 100%);
+            color: white;
+        }
+        
+        .btn-primary { 
+            background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+        }
+        
+        /* Right Panel - Live Chat */
+        .chat-panel { 
+            flex: 1;
+            min-width: 400px;
+        }
+        
+        .chat-header { 
+            padding: 1.25rem 1.5rem;
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow-md);
+            position: relative;
+        }
+
+        .chat-header::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+        }
+        
+        .chat-customer-info h4 { 
+            margin-bottom: 0.375rem;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .chat-customer-details { 
+            font-size: 13px;
+            opacity: 0.9;
+            font-weight: 500;
+        }
+        
+        .chat-actions { 
+            display: flex; 
+            gap: 0.75rem;
+        }
+        
+        /* Enhanced Chat Button Styles */
+        .new-chat-btn {
+            background: linear-gradient(135deg, var(--success-color), #4caf50);
+            color: white;
+            border: none;
+            border-radius: var(--radius-xl);
+            padding: 0.625rem 1.25rem;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            outline: none;
+        }
+
+        .new-chat-btn:hover {
+            background: linear-gradient(135deg, #4caf50, var(--success-color));
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 230, 118, 0.4);
+        }
+
+        .new-chat-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.6;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .end-chat-btn { 
+            background: linear-gradient(135deg, var(--error-color) 0%, #f44336 100%);
+            color: white;
+            border: none;
+            border-radius: var(--radius-xl);
+            padding: 0.625rem 1.25rem;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            outline: none;
+        }
+
+        .end-chat-btn:hover {
+            background: linear-gradient(135deg, #f44336, var(--error-color));
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(255, 87, 34, 0.4);
+        }
+
+        .chat-status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: var(--radius-full);
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-active {
+            background: rgba(255, 255, 255, 0.2);
+            color: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .status-ready {
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .chat-history { 
+            flex: 1; 
+            overflow-y: auto; 
+            padding: 1.5rem;
+            background: linear-gradient(to bottom, #f8fafc 0%, #e2e8f0 100%);
+            position: relative;
+        }
+
+        .chat-history::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 20px;
+            background: linear-gradient(to bottom, rgba(248, 250, 252, 1), transparent);
+            pointer-events: none;
+            z-index: 1;
+        }
+        
+        .message { 
+            margin-bottom: 1rem;
+            padding: 1rem 1.25rem;
+            border-radius: var(--radius-2xl);
+            max-width: 75%;
+            word-wrap: break-word;
+            clear: both;
+            position: relative;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .message:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+        
+        .message.customer { 
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid var(--border-color);
+            border-bottom-left-radius: var(--radius-md);
+            float: left;
+        }
+        
+        .message.agent { 
+            background: linear-gradient(135deg, var(--primary-light) 0%, rgba(224, 248, 255, 0.9) 100%);
+            border: 1px solid rgba(0, 212, 170, 0.2);
+            border-bottom-right-radius: var(--radius-md);
+            float: right;
+        }
+        
+        .message.system { 
+            background: linear-gradient(135deg, var(--warning-light) 0%, rgba(255, 248, 225, 0.9) 100%);
+            border: 1px solid rgba(255, 167, 38, 0.3);
+            font-style: italic;
+            text-align: center;
+            border-radius: var(--radius-xl);
+            max-width: 90%;
+            margin: 1rem auto;
+            float: none;
+            backdrop-filter: blur(10px);
+        }
+        
+        .message-sender { 
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .message-time { 
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+            text-align: right;
+            opacity: 0.7;
+        }
+        
+        .chat-input-area { 
+            padding: 1.5rem;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .input-container { 
+            display: flex; 
+            gap: 0.75rem;
+            align-items: flex-end;
+            position: relative;
+        }
+        
+        .chat-input { 
+            flex: 1; 
+            padding: 0.875rem 1.25rem;
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-2xl);
+            resize: none;
+            max-height: 120px;
+            font-size: 14px;
+            font-family: inherit;
+            background: var(--bg-primary);
+            transition: all 0.3s ease;
+            outline: none;
+            line-height: 1.5;
+        }
+        
+        .chat-input:focus { 
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.1);
+            transform: translateY(-1px);
+        }
+
+        .chat-input::placeholder {
+            color: var(--text-muted);
+        }
+        
+        .send-btn { 
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: var(--shadow-md);
+            font-size: 18px;
+            outline: none;
+        }
+        
+        .send-btn:hover { 
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 12px 30px rgba(0, 212, 170, 0.4);
+        }
+
+        .send-btn:active {
+            transform: translateY(-1px) scale(1.02);
+        }
+        
+        .send-btn:disabled {
+            background: #cbd5e0;
+            color: var(--text-muted);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .no-selection { 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100%; 
+            color: var(--text-muted);
+            text-align: center;
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(247, 250, 252, 0.8) 100%);
+            position: relative;
+        }
+
+        .no-selection::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%23e2e8f0" opacity="0.1"><circle cx="25" cy="25" r="2"/><circle cx="75" cy="25" r="2"/><circle cx="50" cy="75" r="2"/></svg>') repeat;
+            pointer-events: none;
+        }
+        
+        .no-selection-icon { 
+            font-size: 80px;
+            margin-bottom: 2rem;
+            opacity: 0.3;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .no-selection h3 {
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+            font-weight: 600;
+            font-size: 24px;
+        }
+
+        .no-selection p {
+            color: var(--text-secondary);
+            line-height: 1.6;
+            font-size: 16px;
+        }
+        
+        .recovery-banner { 
+            position: fixed;
+            top: 100px;
+            right: 2rem;
+            max-width: 400px;
+            padding: 1rem 1.5rem;
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-xl);
+            z-index: 1000;
+            transform: translateX(100px);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(20px);
+            border: 2px solid;
+        }
+        
+        .recovery-banner.show { 
+            transform: translateX(0);
+            opacity: 1;
+        }
+        
+        .recovery-banner.success {
+            background: rgba(232, 245, 232, 0.95);
+            border-color: var(--success-color);
+            color: var(--success-color);
+        }
+
+        .recovery-banner.error {
+            background: rgba(255, 235, 238, 0.95);
+            border-color: var(--error-color);
+            color: var(--error-color);
+        }
+
+        .recovery-banner.warning {
+            background: rgba(255, 248, 225, 0.95);
+            border-color: var(--warning-color);
+            color: #b8860b;
+        }
+        
+        .hidden { 
+            display: none !important; 
+        }
+        
+        .clearfix::after {
+            content: "";
+            display: table;
+            clear: both;
+        }
+        
+        /* Enhanced Scrollbars */
+        .customers-list::-webkit-scrollbar, 
+        .pending-list::-webkit-scrollbar, 
+        .chat-history::-webkit-scrollbar { 
+            width: 6px; 
+        }
+        
+        .customers-list::-webkit-scrollbar-track, 
+        .pending-list::-webkit-scrollbar-track, 
+        .chat-history::-webkit-scrollbar-track { 
+            background: var(--bg-secondary);
+            border-radius: var(--radius-sm);
+        }
+        
+        .customers-list::-webkit-scrollbar-thumb, 
+        .pending-list::-webkit-scrollbar-thumb, 
+        .chat-history::-webkit-scrollbar-thumb { 
+            background: var(--text-muted);
+            border-radius: var(--radius-sm);
+            transition: background 0.3s ease;
+        }
+
+        .customers-list::-webkit-scrollbar-thumb:hover, 
+        .pending-list::-webkit-scrollbar-thumb:hover, 
+        .chat-history::-webkit-scrollbar-thumb:hover { 
+            background: var(--text-secondary);
+        }
+        
+        /* Enhanced Responsive Design */
+        @media (max-width: 1400px) {
+            .customers-panel { width: 340px; }
+            .pending-panel { width: 380px; }
+        }
+        
+        @media (max-width: 1200px) {
+            .customers-panel { width: 300px; }
+            .pending-panel { width: 340px; }
+            .chat-panel { min-width: 360px; }
+        }
+        
+        @media (max-width: 1000px) {
+            .main-container { 
+                flex-direction: column; 
+                height: auto; 
+                overflow-y: auto;
+            }
+            .customers-panel, .pending-panel { 
+                width: 100%; 
+                height: 280px; 
+                min-width: auto;
+            }
+            .chat-panel { 
+                height: calc(100vh - 640px);
+                min-height: 400px;
+                min-width: auto;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .header {
+                padding: 1rem;
+                flex-direction: column;
+                gap: 1rem;
+            }
+            .header h1 { 
+                font-size: 22px;
+            }
+            .agent-info { 
+                justify-content: center;
+                gap: 1rem;
+            }
+            .customers-panel, .pending-panel { 
+                height: 220px; 
+            }
+            .chat-panel { 
+                height: calc(100vh - 540px);
+                min-height: 350px;
+            }
+            .customer-name, .chat-customer-info h4 {
+                font-size: 14px;
+            }
+            .new-chat-btn, .end-chat-btn {
+                padding: 0.5rem 1rem;
+                font-size: 11px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .header { 
+                padding: 0.875rem;
+            }
+            .customers-header, .pending-header { 
+                padding: 1.25rem;
+            }
+            .chat-header { 
+                padding: 1rem 1.25rem;
+            }
+            .customers-panel, .pending-panel { 
+                height: 200px; 
+            }
+            .chat-panel { 
+                height: calc(100vh - 480px);
+                min-height: 320px;
+            }
+            .chat-actions {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            .new-chat-btn, .end-chat-btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
+        /* Loading Animation */
+        @keyframes shimmer {
+            0% { background-position: -200px 0; }
+            100% { background-position: calc(200px + 100%) 0; }
+        }
+
+        .loading-shimmer {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200px 100%;
+            animation: shimmer 1.5s infinite;
+        }
+    </style>
+</body>
+</html>

@@ -1,0 +1,44 @@
+fastapi
+uvicorn
+mysql-connector-python
+requests
+python-multipart
+python-dotenv
+pymongo
+google-generativeai
+werkzeug
+jinja2
+groq
+faiss-cpu
+langchain
+langchain-community
+langchain-text-splitters
+pypdf
+python-docx
+pandas
+openpyxl
+sentence-transformers
+
+
+
+
+
+
+# uvicorn app:app --host 0.0.0.0 --port 8999
+# cloudflared tunnel --url http://localhost:8999
+# http://localhost:8999/agent/login
+# http://localhost:8999/admin/knowledge
+
+# whatsapp-bot/
+# │
+# ├── app.py                # Main API
+# ├── config.py             # Token, IDs
+# ├── webhook.py            # WhatsApp webhook logic
+# ├── flows/
+# │   ├── insurance.py
+# │   └── sales.py
+# │
+# ├── templates/
+# │   └── messages.py
+# │
+# └── requirements.txt

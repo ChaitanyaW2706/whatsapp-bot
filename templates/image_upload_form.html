@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vehicle Image Upload</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        
+        .form-container {
+            padding: 40px;
+        }
+        
+        .service-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-left: 4px solid #4CAF50;
+        }
+        
+        .service-info h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .service-info p {
+            color: #666;
+            margin: 5px 0;
+        }
+        
+        .upload-area {
+            border: 3px dashed #ddd;
+            border-radius: 10px;
+            padding: 40px 20px;
+            text-align: center;
+            background: #fafafa;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+            cursor: pointer;
+        }
+        
+        .upload-area:hover {
+            border-color: #4CAF50;
+            background: #f0f8f0;
+        }
+        
+        .upload-area.dragover {
+            border-color: #4CAF50;
+            background: #e8f5e8;
+        }
+        
+        .upload-icon {
+            font-size: 48px;
+            color: #4CAF50;
+            margin-bottom: 20px;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .upload-btn {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.3);
+        }
+        
+        .image-preview {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .preview-item {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        }
+        
+        .preview-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .remove-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(255, 0, 0, 0.8);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .submit-btn {
+            background: linear-gradient(135deg, #FF9800, #F57C00);
+            color: white;
+            padding: 15px 40px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            width: 100%;
+            margin-top: 30px;
+            transition: all 0.3s ease;
+        }
+        
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 152, 0, 0.3);
+        }
+        
+        .submit-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #45a049);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: none;
+            text-align: center;
+        }
+        
+        .success-message h2 {
+            margin-bottom: 15px;
+            color: #155724;
+        }
+        
+        .success-message p {
+            margin: 10px 0;
+            line-height: 1.5;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                margin: 10px;
+            }
+            
+            .form-container {
+                padding: 20px;
+            }
+            
+            .header {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚗 Vehicle Image Upload</h1>
+            <p>Upload images for your service estimate</p>
+        </div>
+        
+        <div class="form-container">
+            <div class="service-info">
+                <h3>📋 Service Details</h3>
+                <p><strong>Service Type:</strong> <span id="serviceType">Loading...</span></p>
+                <p><strong>Vehicle:</strong> <span id="vehicleReg">Loading...</span></p>
+                <p><strong>Phone:</strong> <span id="phoneNumber">Loading...</span></p>
+            </div>
+            
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📸</div>
+                <h3>Upload Vehicle Images</h3>
+                <p>Click here or drag & drop images</p>
+                <p style="font-size: 14px; color: #666; margin-top: 10px;">
+                    Supported formats: JPG, PNG, JPEG (Max 10MB each)
+                </p>
+                <input type="file" id="fileInput" name="images" class="file-input" multiple accept="image/*">
+                <br><br>
+                <button type="button" class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                    📁 Choose Images
+                </button>
+            </div>
+            
+            <div class="image-preview" id="imagePreview"></div>
+            
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            
+            <button type="button" class="submit-btn" id="submitBtn" onclick="submitImages()" disabled>
+                🚀 Submit Images for Estimate
+            </button>
+            
+            <div class="success-message" id="successMessage"></div>
+        </div>
+    </div>
+    
+    <script>
+        let selectedFiles = [];
+        let phoneNumber = '';
+        let vehicleReg = '';
+        let serviceType = '';
+        
+        // Get URL parameters and display information
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            // Use server-injected values first, fallback to URL params
+            phoneNumber = "{{ phone_number }}" || urlParams.get('phone') || '';
+            vehicleReg = "{{ vehicle_reg }}" || urlParams.get('vehicle') || '';
+            serviceType = "{{ service_type }}" || urlParams.get('service') || '';
+
+            document.getElementById('serviceType').textContent = serviceType || 'N/A';
+            document.getElementById('vehicleReg').textContent = vehicleReg || 'N/A';
+            document.getElementById('phoneNumber').textContent = phoneNumber || 'N/A';
+        };
+        
+        // Drag and drop functionality
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const imagePreview = document.getElementById('imagePreview');
+        const submitBtn = document.getElementById('submitBtn');
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = Array.from(e.dataTransfer.files);
+            handleFiles(files);
+        });
+        
+        // uploadArea.addEventListener('click', () => {
+        //     fileInput.click();
+        // });
+        
+        fileInput.addEventListener('change', function(e) {
+            const files = Array.from(e.target.files);
+            handleFiles(files);
+            // ✅ FIX: Reset file input after short delay so it triggers next time
+            setTimeout(() => { e.target.value = ''; }, 300);
+        });
+        
+        function handleFiles(files) {
+            files.forEach(file => {
+                if (file.type.startsWith('image/') && file.size <= 10 * 1024 * 1024) {
+                    selectedFiles.push(file);
+                } else if (file.size > 10 * 1024 * 1024) {
+                    alert(`File "${file.name}" is too large. Maximum size is 10MB.`);
+                } else if (!file.type.startsWith('image/')) {
+                    alert(`File "${file.name}" is not an image. Please upload only image files.`);
+                }
+            });
+            updateImagePreview();
+            updateSubmitButton();
+        }
+        
+        function updateImagePreview() {
+            imagePreview.innerHTML = '';
+            
+            selectedFiles.forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const div = document.createElement('div');
+                    div.className = 'preview-item';
+                    div.innerHTML = `
+                        <img src="${e.target.result}" alt="Preview ${index + 1}">
+                        <button type="button" class="remove-btn" onclick="removeImage(${index})" title="Remove image">×</button>
+                    `;
+                    imagePreview.appendChild(div);
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+        
+        function removeImage(index) {
+            selectedFiles.splice(index, 1);
+            updateImagePreview();
+            updateSubmitButton();
+        }
+        
+        function updateSubmitButton() {
+            submitBtn.disabled = selectedFiles.length === 0;
+            submitBtn.textContent = selectedFiles.length > 0 
+                ? `🚀 Submit ${selectedFiles.length} Images for Estimate`
+                : '🚀 Submit Images for Estimate';
+        }
+        
+        function submitImages() {
+            if (selectedFiles.length === 0) {
+                alert('Please select at least one image');
+                return;
+            }
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Uploading...';
+            progressBar.style.display = 'block';
+            
+            // Create FormData for file upload
+            const formData = new FormData();
+            selectedFiles.forEach((file, index) => {
+                formData.append('images', file);
+            });
+            formData.append('phone', phoneNumber);
+            formData.append('vehicle', vehicleReg);
+            formData.append('service', serviceType);
+            
+            // Simulate progress
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += Math.random() * 10;
+                if (progress > 90) progress = 90;
+                progressFill.style.width = progress + '%';
+            }, 200);
+            
+            // Upload to server
+            fetch('/upload-images', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                return response.json();
+            })
+            .then(result => {
+                clearInterval(progressInterval);
+                progressFill.style.width = '100%';
+                
+                console.log('Upload result:', result);
+                
+                if (result.success) {
+                    document.getElementById('successMessage').innerHTML = `
+                        <h2>✅ Upload Successful!</h2>
+                        <p>Your <strong>${result.image_count} images</strong> have been submitted successfully.</p>
+                        <p>Our service advisor will contact you within <strong>2 hours</strong> with your estimate.</p>
+                        <br>
+                        <p style="font-size: 18px; font-weight: bold; color: #4CAF50;">
+                            You can now close this window and return to WhatsApp.
+                        </p>
+                    `;
+                    document.getElementById('successMessage').style.display = 'block';
+                    submitBtn.textContent = '✅ Upload Complete!';
+                    progressBar.style.display = 'none';
+                    
+                    // Auto-scroll to success message
+                    document.getElementById('successMessage').scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    throw new Error(result.message || 'Upload failed');
+                }
+            })
+            .catch(error => {
+                clearInterval(progressInterval);
+                console.error('Upload error:', error);
+                
+                let errorMessage = 'Upload failed';
+                if (error.message) {
+                    errorMessage += ': ' + error.message;
+                }
+                
+                alert(errorMessage);
+                submitBtn.disabled = false;
+                submitBtn.textContent = '🚀 Try Again';
+                progressBar.style.display = 'none';
+                progressFill.style.width = '0%';
+            });
+        }
+    </script>
+</body>
+</html>
