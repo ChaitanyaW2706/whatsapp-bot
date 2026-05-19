@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Insurance Document</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 450px;
+            padding: 30px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        
+        .logo {
+            color: #25D366;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        h1 {
+            color: #333;
+            font-size: 22px;
+            margin-bottom: 5px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .user-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 25px;
+            border-left: 4px solid #25D366;
+        }
+        
+        .info-row {
+            display: flex;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .info-label {
+            color: #666;
+            min-width: 120px;
+            font-weight: 500;
+        }
+        
+        .info-value {
+            color: #333;
+            font-weight: 600;
+        }
+        
+        .upload-section {
+            border: 2px dashed #ddd;
+            border-radius: 10px;
+            padding: 30px 20px;
+            text-align: center;
+            margin-bottom: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .upload-section:hover {
+            border-color: #25D366;
+            background: #f8fff8;
+        }
+        
+        .upload-icon {
+            font-size: 40px;
+            color: #25D366;
+            margin-bottom: 10px;
+        }
+        
+        .upload-text {
+            color: #333;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .upload-hint {
+            color: #888;
+            font-size: 13px;
+            margin-bottom: 15px;
+        }
+        
+        .file-name {
+            color: #25D366;
+            font-weight: 500;
+            font-size: 14px;
+            word-break: break-all;
+        }
+        
+        input[type="file"] {
+            display: none;
+        }
+        
+        .upload-btn {
+            background: #25D366;
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.3s;
+        }
+        
+        .upload-btn:hover {
+            background: #1da851;
+        }
+        
+        .upload-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .success {
+            background: #d4f8e3;
+            color: #155724;
+            border: 1px solid #c3f6d3;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .loading {
+            display: none;
+            width: 30px;
+            height: 30px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #25D366;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 15px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .whatsapp-link {
+            display: inline-block;
+            margin-top: 15px;
+            color: #25D366;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 14px;
+        }
+        
+        .whatsapp-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">📄 AutoSherpa</div>
+            <h1>Upload Insurance Document</h1>
+            <p class="subtitle">Upload your previous policy for quick estimate</p>
+        </div>
+        
+        <div class="user-info">
+            <div class="info-row">
+                <span class="info-label">Name:</span>
+                <span class="info-value" id="displayName">Loading...</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Mobile:</span>
+                <span class="info-value" id="displayMobile">Loading...</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Vehicle:</span>
+                <span class="info-value" id="displayVehicle">Loading...</span>
+            </div>
+        </div>
+        
+        <div class="upload-section" id="dropArea">
+            <div class="upload-icon">📎</div>
+            <p class="upload-text">Click or Drag & Drop your document</p>
+            <p class="upload-hint">Supported: PDF, JPG, PNG (Max 5MB)</p>
+            <p class="file-name" id="fileName"></p>
+        </div>
+        
+        <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png">
+        
+        <button class="upload-btn" id="uploadBtn" disabled>Upload Document</button>
+        
+        <div class="loading" id="loadingSpinner"></div>
+        
+        <div class="status" id="statusMessage"></div>
+        
+        <a href="#" class="whatsapp-link" id="whatsappLink" style="display: none;">
+            📱 Return to WhatsApp
+        </a>
+    </div>
+
+    <script>
+        // Get parameters from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+
+            // ✅ Format Indian mobile number to +91-XXXXXXXXXX
+        function formatMobile(mobile) {
+            if (!mobile) return 'Not provided';
+
+            mobile = mobile.toString().trim();
+
+            // If already starts with +91-
+            if (mobile.startsWith("+91-")) return mobile;
+
+            // If starts with 91XXXXXXXXXX
+            if (mobile.startsWith("91") && mobile.length === 12) {
+                return "+91-" + mobile.slice(2);
+            }
+
+            // If 10 digit number
+            if (mobile.length === 10) {
+                return "+91-" + mobile;
+            }
+
+            return mobile; // fallback
+        }
+
+        
+        // Display loading state
+        document.getElementById('displayName').textContent = 'Loading...';
+        document.getElementById('displayMobile').textContent = 'Loading...';
+        document.getElementById('displayVehicle').textContent = 'Loading...';
+        
+        // Fetch user data from backend
+        async function fetchUserData() {
+            try {
+                const response = await fetch(`/api/estimate-info?token=${token}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('displayName').textContent = data.name || 'Not provided';
+                    document.getElementById('displayMobile').textContent = formatMobile(data.mobile);
+
+                    document.getElementById('displayVehicle').textContent = data.vehicle || 'Not provided';
+                    
+                    // Store data for upload
+                    window.userData = {
+                        mobile: data.mobile,
+                        name: data.name,
+                        vehicle: data.vehicle
+                    };
+                } else {
+                    showError('Failed to load user data. Please try again.');
+                }
+            } catch (error) {
+                showError('Network error. Please check your connection.');
+            }
+        }
+        
+        // Call on page load
+        fetchUserData();
+        
+        let selectedFile = null;
+        const dropArea = document.getElementById('dropArea');
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const fileNameDisplay = document.getElementById('fileName');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const statusMessage = document.getElementById('statusMessage');
+        const whatsappLink = document.getElementById('whatsappLink');
+        
+        // Handle click on drop area
+        dropArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        // Handle file selection
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                selectedFile = e.target.files[0];
+                
+                // Check file size (5MB limit)
+                if (selectedFile.size > 5 * 1024 * 1024) {
+                    showError('File size exceeds 5MB limit');
+                    selectedFile = null;
+                    fileNameDisplay.textContent = '';
+                    uploadBtn.disabled = true;
+                    return;
+                }
+                
+                fileNameDisplay.textContent = selectedFile.name;
+                uploadBtn.disabled = false;
+            }
+        });
+        
+        // Handle drag and drop
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, highlight, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, unhighlight, false);
+        });
+        
+        function highlight() {
+            dropArea.style.borderColor = '#25D366';
+            dropArea.style.backgroundColor = '#f8fff8';
+        }
+        
+        function unhighlight() {
+            dropArea.style.borderColor = '#ddd';
+            dropArea.style.backgroundColor = '';
+        }
+        
+        // Handle file drop
+        dropArea.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            
+            if (files.length > 0) {
+                selectedFile = files[0];
+                
+                // Check file size
+                if (selectedFile.size > 5 * 1024 * 1024) {
+                    showError('File size exceeds 5MB limit');
+                    selectedFile = null;
+                    fileNameDisplay.textContent = '';
+                    uploadBtn.disabled = true;
+                    return;
+                }
+                
+                fileNameDisplay.textContent = selectedFile.name;
+                uploadBtn.disabled = false;
+            }
+        });
+        
+        // Handle upload
+        uploadBtn.addEventListener('click', async () => {
+            if (!selectedFile) {
+                showError('Please select a file first');
+                return;
+            }
+            
+            if (!window.userData) {
+                showError('User data not loaded. Please refresh the page.');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('document', selectedFile);
+            formData.append('mobile', window.userData.mobile);
+            formData.append('name', window.userData.name);
+            formData.append('vehicle', window.userData.vehicle);
+            formData.append('token', token);
+            
+            // Show loading
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Uploading...';
+            loadingSpinner.style.display = 'block';
+            statusMessage.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/upload-estimate', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showSuccess(`
+                        ✅ Document uploaded successfully!<br><br>
+                        <strong>What happens next:</strong><br>
+                        ✔ Our advisor will review your policy<br>
+                        ✔ Check insurer options<br>
+                        ✔ Apply discounts/NCB<br>
+                        ✔ Contact you within 2 hours
+                    `);
+                    
+                    // Show WhatsApp link
+                    whatsappLink.style.display = 'inline-block';
+                    whatsappLink.href = `https://wa.me/${window.userData.mobile}?text=Document uploaded successfully!`;
+                    
+                    // Disable upload section
+                    dropArea.style.pointerEvents = 'none';
+                    dropArea.style.opacity = '0.6';
+                    
+                    // Auto-close after 8 seconds
+                    setTimeout(() => {
+                        window.close();
+                    }, 8000);
+                    
+                } else {
+                    showError(result.message || 'Upload failed. Please try again.');
+                    uploadBtn.disabled = false;
+                    uploadBtn.textContent = 'Upload Document';
+                }
+                
+            } catch (error) {
+                showError('Network error. Please check your connection.');
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Upload Document';
+            } finally {
+                loadingSpinner.style.display = 'none';
+            }
+        });
+        
+        function showSuccess(message) {
+            statusMessage.innerHTML = message;
+            statusMessage.className = 'status success';
+            statusMessage.style.display = 'block';
+        }
+        
+        function showError(message) {
+            statusMessage.textContent = message;
+            statusMessage.className = 'status error';
+            statusMessage.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
