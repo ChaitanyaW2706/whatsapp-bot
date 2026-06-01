@@ -11,7 +11,6 @@ from ai import store_interaction as _log_conv
 from flows.service import router as service_router
 from fastapi import APIRouter, FastAPI, Request
 from db import get_db
-from groq import Groq
 
 app = FastAPI()
 app.include_router(service_router)
@@ -31,8 +30,7 @@ app.include_router(service_router)
 #  • Each flow has its own intent map matching its actual button IDs
 # ══════════════════════════════════════════════════════════════════
 
-_groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-_GROQ_MODEL  = "llama-3.3-70b-versatile"
+from llm_config import groq_client as _groq_client, MODEL_NAME as _GROQ_MODEL
 
 
 # ── Per-flow intent maps: what button IDs each flow understands ──
@@ -1696,31 +1694,37 @@ def handle_message(data):
                     _vreg = _user_info.get("vehicle_reg") or _user_info.get("reg_number") or \
                             _user_info.get("data", {}).get("reg_no")
 
-                    _ai_reply = handle_general_query_in_flow(
+                    _ai_reply, _follow_on = handle_general_query_in_flow(
                         phone=phone,
                         user_text=text,
                         flow_type=_flow,
                         vehicle_reg=_vreg,
                         user_state=_user_info
                     )
-                    send_whatsapp_message(phone, _ai_reply)
+                    
+                    if _follow_on == "TALK_TO_ADVISOR":
+                        print(f"🤖 LLM requested agent handoff for: '{text}'")
+                        text = "TALK_TO_ADVISOR"
+                        # Fall through to the flow handlers below to process the TALK_TO_ADVISOR action
+                    else:
+                        send_whatsapp_message(phone, _ai_reply)
 
-                    # ── Soft hint after AI answers a mid-renewal question ─────
-                    # Send a gentle one-liner so user knows to continue.
-                    # Do NOT re-send the full list — it feels like the bot is
-                    # ignoring the question and forcing the flow.
-                    _step_hints = {
-                        "STATE_4_RENEW_TYPE": "😊 Hope that helps! Please select your *renewal type* from the list above to continue.",
-                        "STATE_4_MODE":       "😊 Hope that helps! Please select your *appointment mode* from the options above to continue.",
-                        "STATE_4_DATE":       "😊 Hope that helps! Please select your *preferred date* from the options above to continue.",
-                        "STATE_4_SLOT":       "😊 Hope that helps! Please select your *preferred time slot* from the options above to continue.",
-                        "STATE_4_NAME":       "😊 Hope that helps! Please share your *name* to confirm the appointment.",
-                    }
-                    _hint = _step_hints.get(current_state_for_ai)
-                    if _hint:
-                        send_whatsapp_message(phone, _hint)
+                        # ── Soft hint after AI answers a mid-renewal question ─────
+                        # Send a gentle one-liner so user knows to continue.
+                        # Do NOT re-send the full list — it feels like the bot is
+                        # ignoring the question and forcing the flow.
+                        _step_hints = {
+                            "STATE_4_RENEW_TYPE": "😊 Hope that helps! Please select your *renewal type* from the list above to continue.",
+                            "STATE_4_MODE":       "😊 Hope that helps! Please select your *appointment mode* from the options above to continue.",
+                            "STATE_4_DATE":       "😊 Hope that helps! Please select your *preferred date* from the options above to continue.",
+                            "STATE_4_SLOT":       "😊 Hope that helps! Please select your *preferred time slot* from the options above to continue.",
+                            "STATE_4_NAME":       "😊 Hope that helps! Please share your *name* to confirm the appointment.",
+                        }
+                        _hint = _step_hints.get(current_state_for_ai)
+                        if _hint:
+                            send_whatsapp_message(phone, _hint)
 
-                    return  # State untouched — customer stays exactly where they were
+                        return  # State untouched — customer stays exactly where they were
 
                 elif _ai_resolved_action and _ai_resolved_action != "GENERAL_QUERY":
                     print(f"✅ AI resolved free-text '{text}' → button '{_ai_resolved_action}'")
@@ -2188,7 +2192,7 @@ def handle_message(data):
                 elif restored_state == "SALES_NEW_CARS":
                     from db import get_all_cars_paginated
                     page = USER_STATE[phone].get("car_page", 1)
-                    result = get_all_cars_paginated(page=page, per_page=9)
+                    result = get_all_cars_paginated(page=page, per_page=8)
                     rows = [{"id": f"MODEL_{c['id']}", "title": f"{c['make']} {c['model']}"[:24]}
                             for c in result.get("cars", [])]
                     if result.get("has_next"): rows.append({"id": "NEXT_PAGE", "title": "➡️ Next Page"})

@@ -6,12 +6,10 @@ import re
 import json
 import os
 from datetime import datetime, date, timedelta
-from groq import Groq
 from utils import is_valid_appointment_slot, get_available_booking_dates, resolve_date_from_text, is_genuine_query, understand_customer_in_flow_context
 
 # Initialize Groq client
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-MODEL_NAME = "llama-3.3-70b-versatile"
+from llm_config import groq_client as client, MODEL_NAME
 
 # ============================
 # INTELLIGENT FLOW COMPREHENSION
@@ -2651,7 +2649,6 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
             return
         else:
             # ── Smart Date Resolver (Free-text) ──
-            from datetime import datetime
             all_dates = sorted(list(set([_date.today(), _date.today() + _td(days=1)] + get_remaining_week_dates_used() + get_next_week_dates_used())))
             resolved_id = resolve_date_from_text(text, all_dates, prefix="EXCH_RESOLVED_")
             
@@ -3587,7 +3584,6 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
     # ========================================
     if state == "USED_BOOK_SELECT_WHEN":
 
-        from datetime import date, timedelta
 
         when_map = {
             "USED_WHEN_TODAY": "Today",
@@ -3787,7 +3783,6 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
     if state == "USED_SELECT_EXACT_DATE":
 
         if text.startswith("DATE_"):
-            from datetime import datetime
 
             raw_date = text.replace("DATE_", "")  # 20260220
             formatted_date = datetime.strptime(raw_date, "%Y%m%d").strftime("%d-%m-%Y")
@@ -4186,6 +4181,34 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
             _used_route_via_ai(phone, text, state)
             return
 
+def extract_gridfs_image(url_path, prefix):
+    if not url_path: return None
+    if url_path.startswith("http"): return url_path
+    if not url_path.startswith("/images/"): return None
+    
+    try:
+        from pymongo import MongoClient
+        from bson.objectid import ObjectId
+        import gridfs
+        import os
+        from config import MONGO_URI, BASE_URL
+        
+        file_id = url_path.split("/")[-1]
+        client = MongoClient(MONGO_URI)
+        db = client["whatsapp_bot"]
+        fs = gridfs.GridFS(db)
+        
+        grid_out = fs.get(ObjectId(file_id))
+        os.makedirs("static/cars", exist_ok=True)
+        filename = f"{prefix}_{file_id}.jpg"
+        filepath = os.path.join("static", "cars", filename)
+        with open(filepath, "wb") as f:
+            f.write(grid_out.read())
+        return f"{BASE_URL}/static/cars/{filename}"
+    except Exception as e:
+        print(f"Error extracting GridFS image: {e}")
+        return None
+
 def _show_used_cars(phone):
     from webhook import send_whatsapp_message, send_whatsapp_image, send_button_message
     import time
@@ -4221,9 +4244,30 @@ def _show_used_cars(phone):
     # SHOW CARS
     # ─────────────────────────────────────
     for car in cars:
-        images = [i.strip() for i in (car.get("image_url") or "").split(",") if i.strip()]
-        if images:
-            send_whatsapp_image(phone, images[0])
+        import json
+        raw_image = car.get("image_url") or ""
+        images = []
+        try:
+            if raw_image.startswith("{"):
+                images = list(json.loads(raw_image).values())
+            elif raw_image.startswith("["):
+                images = json.loads(raw_image)
+            else:
+                images = [i.strip() for i in raw_image.split(",") if i.strip()]
+        except:
+            images = [raw_image]
+            
+        valid_images = []
+        for img in images:
+            if img.startswith("/images/"):
+                extracted = extract_gridfs_image(img, f"used_{car['serial_number']}")
+                if extracted:
+                    valid_images.append(extracted)
+            elif img.startswith("http"):
+                valid_images.append(img)
+
+        if valid_images:
+            send_whatsapp_image(phone, valid_images[0])
             time.sleep(2.0)
 
         car_title = f"{car['make']} {car['model']} {car.get('variant', '')}".strip()
@@ -4314,13 +4358,33 @@ def _show_more_images(phone, car_id):
     if not row or not row.get("image_url"):
         return
 
-    images = [i.strip() for i in row["image_url"].split(",") if i.strip()]
+    import json
+    raw_image = row["image_url"] or ""
+    images = []
+    try:
+        if raw_image.startswith("{"):
+            images = list(json.loads(raw_image).values())
+        elif raw_image.startswith("["):
+            images = json.loads(raw_image)
+        else:
+            images = [i.strip() for i in raw_image.split(",") if i.strip()]
+    except:
+        images = [raw_image]
+        
+    valid_images = []
+    for i, img in enumerate(images):
+        if img.startswith("/images/"):
+            extracted = extract_gridfs_image(img, f"used_{car_id}_{i}")
+            if extracted:
+                valid_images.append(extracted)
+        elif img.startswith("http"):
+            valid_images.append(img)
 
     # 🔥 Store current car for back button
     USER_STATE[phone]["last_viewed_car_id"] = car_id
 
     # Send remaining images (skip first image)
-    for img in images[1:]:
+    for img in valid_images[1:]:
         send_whatsapp_image(phone, img)
         time.sleep(3.2)   # ✅ IMPORTANT → prevents middle overlap
 

@@ -19,15 +19,13 @@ import json
 import mysql.connector
 from datetime import datetime
 from dotenv import load_dotenv
-from groq import Groq
 from vector_db import vector_service
 from utils import normalize_text, classify_insurance_intent_request, is_insurance_knowledge_query
 
 load_dotenv()
 
 # ── Groq client ────────────────────────────────────────────
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-MODEL_NAME = "llama-3.3-70b-versatile"
+from llm_config import groq_client as client, MODEL_NAME
 
 
 # ════════════════════════════════════════════════════════════
@@ -281,7 +279,7 @@ STRICT RULES:
 
 def handle_general_query_in_flow(phone: str, user_text: str,
                                   flow_type: str, vehicle_reg: str = None,
-                                  user_state: dict = None) -> str:
+                                  user_state: dict = None) -> tuple:
     """
     Called when a user sends a free-text message inside an active flow
     that doesn't match any button action (GENERAL_QUERY).
@@ -297,36 +295,30 @@ def handle_general_query_in_flow(phone: str, user_text: str,
         user_state : Full user state dict for budget / model context
 
     Returns:
-        AI-generated reply string (already stored in DB by the sub-handler)
+        (reply, follow_on) tuple with AI-generated reply and suggested next action
     """
     flow_type = (flow_type or "general").lower()
 
     if flow_type == "insurance":
-        # handle_insurance_ai_query returns (reply, follow_on)
-        reply, _ = handle_insurance_ai_query(phone, user_text, vehicle_reg=vehicle_reg)
-        return reply
+        return handle_insurance_ai_query(phone, user_text, vehicle_reg=vehicle_reg)
 
     elif flow_type == "sales":
-        reply, _ = handle_sales_ai_query(phone, user_text, user_state=user_state)
-        return reply
+        return handle_sales_ai_query(phone, user_text, user_state=user_state)
 
     elif flow_type == "used_cars":
-        reply, _ = handle_used_cars_ai_query(phone, user_text, user_state=user_state)
-        return reply
+        return handle_used_cars_ai_query(phone, user_text, user_state=user_state)
 
     elif flow_type == "service":
-        reply, _ = handle_service_ai_query(phone, user_text, vehicle_reg=vehicle_reg)
-        return reply
+        return handle_service_ai_query(phone, user_text, vehicle_reg=vehicle_reg)
 
     elif flow_type == "refinancing":
         # Refinancing uses general AI with a refinancing-aware prompt
-        reply, _ = _handle_refinancing_ai_query(phone, user_text, user_state=user_state)
-        return reply
+        return _handle_refinancing_ai_query(phone, user_text, user_state=user_state)
 
     else:
         reply = get_ai_response(user_text)
         _store_conversation(phone, user_text, reply, flow_type="general")
-        return reply
+        return reply, "NONE"
 
 
 def _detect_refinancing_follow_on_action(user_text: str, ai_reply: str) -> str:

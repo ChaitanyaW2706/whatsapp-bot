@@ -21,7 +21,7 @@ templates = Jinja2Templates(directory="templates")
 
 import mysql.connector
 from mysql.connector import Error
-from groq import Groq
+import traceback
 from dotenv import load_dotenv
 import requests
 from utils import resolve_date_from_text, is_valid_appointment_slot
@@ -78,8 +78,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 PHONE_NUMBER_ID = os.getenv('PHONE_NUMBER_ID')
 
 # Configure Groq client
-groq_client = Groq(api_key=GROQ_API_KEY)
-GROQ_MODEL = "llama-3.3-70b-versatile"
+from llm_config import groq_client, MODEL_NAME as GROQ_MODEL
 
 def groq_generate(prompt: str) -> str:
     """Call Groq API and return response text"""
@@ -268,7 +267,7 @@ class DatabaseManager:
                 conn.close()
 
     def store_service_estimate_request(self, phone_number: str, vehicle_reg: str,
-                                      estimate_type: str, image_uploaded: bool = False,
+                                      estimate_type: str, image_uploaded=False,
                                       image_count: int = 0) -> bool:
         """Store service estimate request"""
         conn = self.get_connection()
@@ -276,6 +275,14 @@ class DatabaseManager:
             return False
         
         try:
+            # Handle image_uploaded type dynamically
+            if isinstance(image_uploaded, bool):
+                img_val = '1' if image_uploaded else '0'
+            elif isinstance(image_uploaded, (list, dict)):
+                img_val = json.dumps(image_uploaded)
+            else:
+                img_val = str(image_uploaded)
+
             cursor = conn.cursor()
             query = """
             INSERT INTO service_estimate_requests
@@ -287,7 +294,7 @@ class DatabaseManager:
                 phone_number,
                 vehicle_reg,
                 estimate_type,
-                image_uploaded,
+                img_val,
                 image_count,
                 datetime.now(),
                 'pending'
@@ -439,7 +446,7 @@ class DatabaseManager:
                     phone_number VARCHAR(20),
                     vehicle_reg VARCHAR(20),
                     estimate_type VARCHAR(100),
-                    image_uploaded BOOLEAN DEFAULT FALSE,
+                    image_uploaded LONGTEXT,
                     image_count INT DEFAULT 0,
                     request_timestamp DATETIME,
                     status VARCHAR(20) DEFAULT 'pending',
@@ -451,6 +458,14 @@ class DatabaseManager:
                     INDEX idx_request_timestamp (request_timestamp)
                 )
             """)
+            
+            # Migration: Ensure image_uploaded is LONGTEXT
+            try:
+                cursor.execute("ALTER TABLE service_estimate_requests MODIFY COLUMN image_uploaded LONGTEXT")
+                conn.commit()
+                logger.info("✅ Altered image_uploaded column to LONGTEXT in service_estimate_requests")
+            except Exception as e:
+                pass
             
             # Image upload requests table
             cursor.execute("""
@@ -5352,7 +5367,8 @@ async def upload_images(
                 phone,     # ← was phone_number
                 vehicle,   # ← was vehicle_reg
                 service,   # ← was service_type
-                True,
+                [f['relative_path'] for f in saved_files],
+
                 len(saved_files)
             )
         except Exception as e:
@@ -5702,13 +5718,17 @@ async def agent_login(request: Request):
 async def agent_dashboard(request: Request, agent_id: int):
     """Agent dashboard"""
     try:
-        return templates.TemplateResponse(
+        response = templates.TemplateResponse(
             "agent_dashboard.html",
             {
                 "request": request,   # ✅ MUST pass real request
                 "agent_id": agent_id
             }
         )
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
     except Exception as e:
         return HTMLResponse(f"Template error: {e}", status_code=500)
 

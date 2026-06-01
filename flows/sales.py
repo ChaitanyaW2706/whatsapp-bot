@@ -8,12 +8,10 @@ import time
 import threading
 import json
 from db import get_full_car_details, get_latest_manufacturing_year, get_all_cars_paginated
-from groq import Groq
 from utils import is_valid_appointment_slot, get_available_booking_dates, resolve_date_from_text
 
 # Initialize Groq client
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-MODEL_NAME = "llama-3.3-70b-versatile"
+from llm_config import groq_client as client, MODEL_NAME
 
 
 # ============================
@@ -173,7 +171,7 @@ def _trigger_sales_follow_on(phone, follow_on):
         else:
             USER_STATE[phone]["state"]    = "SALES_NEW_CARS"
             USER_STATE[phone]["car_page"] = 1
-            result = get_all_cars_paginated(page=1, per_page=9)
+            result = get_all_cars_paginated(page=1, per_page=8)
             rows = [{"id": f"MODEL_{c['id']}", "title": f"{c['make']} {c['model']}"[:24]}
                     for c in result.get("cars", [])]
             if result.get("has_next"): rows.append({"id": "NEXT_PAGE", "title": "➡️ Next Page"})
@@ -293,7 +291,7 @@ def _sales_route_via_ai(phone, text, state):
         # ── No specific car → show full car list ─────────────────────────
         USER_STATE[phone]["state"]    = "SALES_NEW_CARS"
         USER_STATE[phone]["car_page"] = 1
-        result = get_all_cars_paginated(page=1, per_page=9)
+        result = get_all_cars_paginated(page=1, per_page=8)
         if not result["cars"]:
             send_whatsapp_message(phone, "No cars available at the moment 😕"); return
         rows = [{"id": f"MODEL_{c['id']}", "title": f"{c['make']} {c['model']}"[:24]}
@@ -341,7 +339,7 @@ def _sales_route_via_ai(phone, text, state):
         else:
             USER_STATE[phone]["state"]    = "SALES_NEW_CARS"
             USER_STATE[phone]["car_page"] = 1
-            result = get_all_cars_paginated(page=1, per_page=9)
+            result = get_all_cars_paginated(page=1, per_page=8)
             rows = [{"id": f"MODEL_{c['id']}", "title": f"{c['make']} {c['model']}"[:24]}
                     for c in result.get("cars", [])]
             if result.get("has_next"): rows.append({"id": "NEXT_PAGE", "title": "➡️ Next Page"})
@@ -621,16 +619,40 @@ def send_messages_in_strict_order(phone):
         base64_image = car.get("car_image_base64")
 
         if base64_image:
-
-            if base64_image.startswith("data:"):
-                base64_image = base64_image.split(",")[1]
-
-            print("Image length:", len(base64_image))
-
-            image_url = save_base64_to_image_and_get_url(
-                f"{car['make']}_{car['model']}",
-                base64_image
-            )
+            image_url = None
+            if base64_image.startswith("[") or base64_image.startswith("/images/") or base64_image.startswith("http"):
+                try:
+                    import json
+                    from pymongo import MongoClient
+                    from bson.objectid import ObjectId
+                    import gridfs
+                    from config import MONGO_URI
+                    
+                    url_path = json.loads(base64_image)[0] if base64_image.startswith("[") else base64_image
+                    
+                    if url_path.startswith("http"):
+                        image_url = url_path
+                    else:
+                        file_id = url_path.split("/")[-1]
+                        client = MongoClient(MONGO_URI)
+                        db = client["whatsapp_bot"]
+                        fs = gridfs.GridFS(db)
+                        
+                        grid_out = fs.get(ObjectId(file_id))
+                        os.makedirs("static/cars", exist_ok=True)
+                        filename = f"{car['make'].lower()}_{car['model'].lower().replace(' ', '_')}.jpg"
+                        filepath = os.path.join("static", "cars", filename)
+                        with open(filepath, "wb") as f:
+                            f.write(grid_out.read())
+                        image_url = f"{BASE_URL}/static/cars/{filename}"
+                        print(f"✅ Extracted image directly from MongoDB GridFS: {image_url}")
+                except Exception as e:
+                    print(f"❌ Failed to extract image from MongoDB: {e}")
+            else:
+                if base64_image.startswith("data:"):
+                    base64_image = base64_image.split(",")[1]
+                print("Image length:", len(base64_image))
+                image_url = save_base64_to_image_and_get_url(f"{car['make']}_{car['model']}", base64_image)
 
             print("Image URL:", image_url)
 
@@ -682,27 +704,43 @@ def send_messages_in_strict_order(phone):
         base64_pdf = car.get("brochure_pdf_base64")
 
         if base64_pdf:
-
-            if base64_pdf.startswith("data:"):
-                base64_pdf = base64_pdf.split(",")[1]
-
-            pdf_url = save_base64_to_pdf_and_get_url(
-                f"{car['make']}_{car['model']}",
-                base64_pdf
-            )
+            pdf_url = None
+            if base64_pdf.startswith("[") or base64_pdf.startswith("/images/") or base64_pdf.startswith("http"):
+                try:
+                    import json
+                    from pymongo import MongoClient
+                    from bson.objectid import ObjectId
+                    import gridfs
+                    from config import MONGO_URI
+                    
+                    url_path = json.loads(base64_pdf)[0] if base64_pdf.startswith("[") else base64_pdf
+                    
+                    if url_path.startswith("http"):
+                        pdf_url = url_path
+                    else:
+                        file_id = url_path.split("/")[-1]
+                        client = MongoClient(MONGO_URI)
+                        db = client["whatsapp_bot"]
+                        fs = gridfs.GridFS(db)
+                        
+                        grid_out = fs.get(ObjectId(file_id))
+                        os.makedirs("static/brochures", exist_ok=True)
+                        filename = f"{car['make'].lower()}_{car['model'].lower().replace(' ', '_')}_brochure.pdf"
+                        filepath = os.path.join("static", "brochures", filename)
+                        with open(filepath, "wb") as f:
+                            f.write(grid_out.read())
+                        pdf_url = f"{BASE_URL}/static/brochures/{filename}"
+                        print(f"✅ Extracted PDF directly from MongoDB GridFS: {pdf_url}")
+                except Exception as e:
+                    print(f"❌ Failed to extract PDF from MongoDB: {e}")
+            else:
+                if base64_pdf.startswith("data:"):
+                    base64_pdf = base64_pdf.split(",")[1]
+                pdf_url = save_base64_to_pdf_and_get_url(f"{car['make']}_{car['model']}", base64_pdf)
 
             if pdf_url:
-                # Optional UX message (nice touch)
-                
-
-                send_whatsapp_document(
-                    phone,
-                    pdf_url,
-                    f"{car['make']}_{car['model']}_Brochure.pdf"
-                )
-
-                # 🔥 IMPORTANT: increase delay so WhatsApp delivers PDF first
-                time.sleep(7)   # 👈 change from 3.5 to 6 seconds
+                send_whatsapp_document(phone, pdf_url, f"{car['make']}_{car['model']}_Brochure.pdf")
+                time.sleep(7)
         else:
             print("⚠️ No brochure found in DB")
 
@@ -797,7 +835,7 @@ def show_car_type_selection(phone):
         # Fallback: show full list if no types found
         USER_STATE[phone]["state"] = "SALES_NEW_CARS"
         USER_STATE[phone]["car_page"] = 1
-        result = get_all_cars_paginated(page=1, per_page=9)
+        result = get_all_cars_paginated(page=1, per_page=8)
         if not result["cars"]:
             send_whatsapp_message(phone, "No cars available at the moment 😕")
             return
@@ -965,7 +1003,7 @@ def sales_flow_handler(phone, text):
                 USER_STATE[phone]["state"] = "SALES_NEW_CARS"
                 USER_STATE[phone]["car_page"] = 1
                 from db import get_all_cars_paginated
-                result = get_all_cars_paginated(page=1, per_page=9)
+                result = get_all_cars_paginated(page=1, per_page=8)
                 if not result["cars"]:
                     send_whatsapp_message(phone, "No cars available at the moment 😕")
                     return
@@ -1102,7 +1140,7 @@ def sales_flow_handler(phone, text):
             next_page = current_page + 1
             
             from db import get_all_cars_paginated
-            result = get_all_cars_paginated(page=next_page, per_page=9)
+            result = get_all_cars_paginated(page=next_page, per_page=8)
             
             if not result["cars"]:
                 send_whatsapp_message(phone, "No more cars available 😕")
@@ -1154,7 +1192,7 @@ def sales_flow_handler(phone, text):
                 return
             
             from db import get_all_cars_paginated
-            result = get_all_cars_paginated(page=prev_page, per_page=9)
+            result = get_all_cars_paginated(page=prev_page, per_page=8)
             
             USER_STATE[phone]["car_page"] = prev_page
             
@@ -1373,7 +1411,7 @@ def sales_flow_handler(phone, text):
             
         if not selected:
             # ── Smart Date Resolver (Free-text) ──
-            from datetime import date as dt_date, timedelta
+            from datetime import date as dt_date
             today = dt_date.today()
             all_dates = sorted(list(set([today, today + timedelta(days=1)] + get_remaining_week_dates() + get_next_week_dates())))
             resolved_id = resolve_date_from_text(text, all_dates, prefix="RESOLVED_WHEN_")

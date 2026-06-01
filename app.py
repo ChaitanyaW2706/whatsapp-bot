@@ -125,7 +125,11 @@ async def agent_dashboard(request: Request, agent_id: int):
             real_id = session["agent_id"]
             return HTMLResponse(f'<script>window.location.href="/agent/dashboard/{real_id}";</script>')
         
-        return templates.TemplateResponse("agent_dashboard.html", {"request": request, "agent_id": agent_id})
+        response = templates.TemplateResponse("agent_dashboard.html", {"request": request, "agent_id": agent_id})
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
     except Exception as e:
         return HTMLResponse(f"Template error: {e}", status_code=500)
 
@@ -638,9 +642,9 @@ async def verify_webhook(request: Request):
 
     if hub_mode == "subscribe" and hub_token == VERIFY_TOKEN:
         print("✅ Webhook verified successfully")
-        return int(hub_challenge)
+        return Response(content=hub_challenge, media_type="text/plain")
 
-    return "Verification failed"
+    return Response(content="Verification failed", status_code=403)
 
 
 # ===============================

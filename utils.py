@@ -11,14 +11,12 @@ import os
 import json
 from datetime import datetime, date, timedelta
 from dotenv import load_dotenv
-from groq import Groq
 from config import USER_STATE
 
 load_dotenv()
 
 # Initialize Groq client
-_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-_MODEL_NAME = "llama-3.3-70b-versatile"
+from llm_config import groq_client as _client, MODEL_NAME as _MODEL_NAME
 
 # ============================================================
 # TOKEN MANAGEMENT

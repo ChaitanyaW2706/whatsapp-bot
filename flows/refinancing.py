@@ -548,9 +548,12 @@ def refinancing_flow_handler(phone: str, text: str):
     if is_genuine_query(text, state):
         try:
             from ai import handle_general_query_in_flow
-            ai_reply = handle_general_query_in_flow(phone, text, flow_type="refinancing")
+            ai_reply, follow_on = handle_general_query_in_flow(phone, text, flow_type="refinancing")
             from webhook import send_whatsapp_message as _send
             _send(phone, ai_reply)
+            
+            if follow_on == "TALK_TO_ADVISOR":
+                refinancing_flow_handler(phone, "TALK_TO_ADVISOR")
         except Exception as _e:
             print(f"[refinancing] AI query error: {_e}")
             handle_refinancing(phone)

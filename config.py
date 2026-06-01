@@ -23,8 +23,10 @@ DB_CONFIG = {
     "database": os.getenv("DB_NAME")
 }
 
-# ===============================
+# =============================== 
 # Global User State (UNCHANGED)
 # ===============================
 USER_STATE = {}
 BASE_URL = os.getenv("BASE_URL")
+MONGO_URI = os.getenv("MONGO_URI")
+ 

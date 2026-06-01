@@ -304,7 +304,7 @@ def get_all_cars():
     
 # Add this to db.py
 
-def get_all_cars_paginated(page=1, per_page=9):
+def get_all_cars_paginated(page=1, per_page=8):
     """Get all cars from sales_car_details table with pagination"""
     import mysql.connector
     from config import DB_CONFIG

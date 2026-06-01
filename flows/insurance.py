@@ -8,7 +8,6 @@ import time
 import os
 import json
 from datetime import datetime, date, timedelta
-from groq import Groq
 from utils import (
     is_valid_appointment_slot,
     get_available_booking_dates,
@@ -24,8 +23,7 @@ from utils import (
 BASE_URL = os.getenv("BASE_URL")
 
 # Initialize Groq client
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-MODEL_NAME = "llama-3.3-70b-versatile"
+from llm_config import groq_client as client, MODEL_NAME
 
 
 # ============================
