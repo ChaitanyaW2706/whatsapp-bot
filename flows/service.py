@@ -5012,8 +5012,16 @@ class WhatsAppBot:
             history = "=== CUSTOMER CHAT HISTORY ===\n\n"
             for conv in reversed(conversations):  # Reverse to show oldest first
                 timestamp = conv['timestamp'].strftime('%H:%M')
-                history += f"[{timestamp}] Customer: {conv['user_message']}\n"
-                history += f"[{timestamp}] AI: {conv['bot_response']}\n\n"
+                user_msg = conv.get('user_message')
+                bot_msg = conv.get('bot_response')
+                
+                if user_msg and str(user_msg).strip().lower() != 'none':
+                    history += f"[{timestamp}] Customer: {user_msg}\n"
+                if bot_msg and str(bot_msg).strip().lower() != 'none':
+                    history += f"[{timestamp}] AI: {bot_msg}\n"
+                
+                if (user_msg and str(user_msg).strip().lower() != 'none') or (bot_msg and str(bot_msg).strip().lower() != 'none'):
+                    history += "\n"
             
             return history
             

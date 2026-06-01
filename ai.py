@@ -586,6 +586,7 @@ def _get_sales_db_context() -> str:
             LEFT JOIN car_colors        cc ON cc.car_id = s.id
             GROUP BY s.id
             ORDER BY s.make, s.model
+            LIMIT 20
         """)
         rows = cur.fetchall()
         cur.close()
@@ -619,7 +620,7 @@ def _get_used_cars_db_context(budget_min: int = None, budget_max: int = None) ->
                        transmission_type, mileage_km,
                        estimated_selling_price
                 FROM   carstockdata
-                WHERE  LOWER(ready_for_sales) = 'available'
+                WHERE  ready_for_sales = 'available'
                   AND  estimated_selling_price BETWEEN %s AND %s
                 ORDER BY estimated_selling_price ASC
                 LIMIT 10
@@ -630,7 +631,7 @@ def _get_used_cars_db_context(budget_min: int = None, budget_max: int = None) ->
                        transmission_type, mileage_km,
                        estimated_selling_price
                 FROM   carstockdata
-                WHERE  LOWER(ready_for_sales) = 'available'
+                WHERE  ready_for_sales = 'available'
                 ORDER BY estimated_selling_price ASC
                 LIMIT 15
             """)
@@ -662,7 +663,7 @@ def _get_targeted_car_details(user_text: str) -> str:
         cur = conn.cursor(dictionary=True)
         
         # 1. Fetch all unique models to check for matches
-        cur.execute("SELECT DISTINCT model, make FROM carstockdata WHERE LOWER(ready_for_sales) = 'available'")
+        cur.execute("SELECT DISTINCT model, make FROM carstockdata WHERE ready_for_sales = 'available' LIMIT 100")
         available_cars = cur.fetchall()
         
         target_model = None
@@ -684,7 +685,7 @@ def _get_targeted_car_details(user_text: str) -> str:
                    manufacturing_year, mileage_km, transmission_type,
                    estimated_selling_price, cubic_capacity_cc, insurance_type
             FROM   carstockdata
-            WHERE  model = %s AND LOWER(ready_for_sales) = 'available'
+            WHERE  model = %s AND ready_for_sales = 'available'
             LIMIT 1
         """, (target_model,))
         r = cur.fetchone()

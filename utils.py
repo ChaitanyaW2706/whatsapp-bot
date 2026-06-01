@@ -804,6 +804,19 @@ def is_genuine_query(text: str, state: str = "") -> bool:
     #    If 5+ words and NOT just a list of proper nouns or numbers,
     #    it's probably a question even without a question word.
     if word_count >= 5:
+        # Check if it contains answer-like or conversational confirmation phrases
+        answer_phrases = [
+            "is fine", "is okay", "is ok", "is good", "works for me", "fine for me",
+            "doesn't matter", "anytime", "any time", "i prefer", "make it",
+            "schedule it", "book for", "perfect", "i am free", "i'm free",
+            "will be free", "let's do", "i will come"
+        ]
+        if any(ans in t_lower for ans in answer_phrases):
+            # If the user is just answering the prompt conversationally, it's not a query
+            # (e.g. "12pm is fine for me", "tomorrow works for me")
+            print(f"[query_gate] BLOCK — contains answer phrase: '{t}'")
+            return False
+
         # Check it's not just a sequence of names/codes
         non_alpha = sum(1 for w in words if not re.match(r'^[A-Za-z]+$', w))
         if non_alpha <= 1:  # mostly letters = natural language

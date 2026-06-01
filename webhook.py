@@ -401,6 +401,15 @@ Unknown → {{"id": "NONE", "confidence": 0.0}}"""
             elif state == "EXCH_TD_LOCATION":
                 online_id = "EXCH_LOC_SHOWROOM"; walkin_id = "EXCH_LOC_SHOWROOM"; field_id = "EXCH_LOC_HOME"
 
+            # Quick keyword bypass to prevent LLM misclassification
+            t_lower = text.lower()
+            if any(k in t_lower for k in ["online", "virtual", "call", "video", "phone", "remote", "digital"]):
+                return online_id
+            if any(k in t_lower for k in ["walk", "in person", "visit", "showroom", "office", "offline", "come"]):
+                return walkin_id
+            if any(k in t_lower for k in ["field", "home", "house", "location", "doorstep", "my place"]):
+                return field_id
+                
             prompt = f"""Map the user message to one appointment mode ID.
 
 - "{online_id}"  → online / virtual / call / video / phone / remote / digital
@@ -423,6 +432,17 @@ Unknown → {{"id": "NONE", "confidence": 0.0}}"""
                 prefix = "WHEN_"
             elif state in ["EXCH_TD_WHEN", "USED_TD_WHEN"]:
                 prefix = "EXCH_WHEN_"
+                
+            # Quick keyword bypass
+            t_lower = text.lower()
+            if any(k in t_lower for k in ["today", "aaj", "right now", "asap", "immediately", "same day"]):
+                return f"{prefix}TODAY"
+            if any(k in t_lower for k in ["tomorrow", "kal", "next day"]):
+                return f"{prefix}TOMORROW"
+            if any(k in t_lower for k in ["later this week", "this week", "few days"]):
+                return f"{prefix}LATER_WEEK"
+            if any(k in t_lower for k in ["next week", "coming week", "following week"]):
+                return f"{prefix}NEXT_WEEK"
                 
             prompt = f"""Map the user message to one date preference ID.
 
