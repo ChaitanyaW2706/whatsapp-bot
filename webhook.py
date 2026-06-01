@@ -30,7 +30,7 @@ app.include_router(service_router)
 #  • Each flow has its own intent map matching its actual button IDs
 # ══════════════════════════════════════════════════════════════════
 
-from llm_config import groq_client as _groq_client, MODEL_NAME as _GROQ_MODEL
+from llm_config import smart_llm_call
 
 
 # ── Per-flow intent maps: what button IDs each flow understands ──
@@ -171,15 +171,14 @@ Examples:
 
 Return ONLY the JSON, no extra text."""
 
-        response = _groq_client.chat.completions.create(
-            model=_GROQ_MODEL,
+        result = smart_llm_call(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
             max_tokens=60,
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
+            as_json=True
         )
 
-        result     = json.loads(response.choices[0].message.content.strip())
         menu_id    = result.get("menu_id", "NONE")
         confidence = float(result.get("confidence", 0.0))
 
@@ -196,14 +195,13 @@ Return ONLY the JSON, no extra text."""
 
 def _call_groq_json(prompt: str, max_tokens: int = 80) -> dict:
     """Shared helper — call Groq and return parsed JSON dict."""
-    response = _groq_client.chat.completions.create(
-        model=_GROQ_MODEL,
+    return smart_llm_call(
         messages=[{"role": "user", "content": prompt}],
         temperature=0.1,
         max_tokens=max_tokens,
-        response_format={"type": "json_object"}
+        response_format={"type": "json_object"},
+        as_json=True
     )
-    return json.loads(response.choices[0].message.content.strip())
 
 
 def _resolve_free_text_as_button(phone: str, text: str, state: str) -> str | None:

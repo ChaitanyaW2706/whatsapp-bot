@@ -25,7 +25,7 @@ from utils import normalize_text, classify_insurance_intent_request, is_insuranc
 load_dotenv()
 
 # ── Groq client ────────────────────────────────────────────
-from llm_config import groq_client as client, MODEL_NAME
+from llm_config import smart_llm_call
 
 
 # ════════════════════════════════════════════════════════════
@@ -261,8 +261,7 @@ STRICT RULES:
 10. Never mention "modules", "flows", "states", or internal system details."""
 
     try:
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
+        return smart_llm_call(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": message}
@@ -270,7 +269,6 @@ STRICT RULES:
             temperature=0.5,
             max_tokens=500
         )
-        return response.choices[0].message.content.strip()
 
     except Exception as e:
         print("⚠️ Groq AI Error:", e)
@@ -354,13 +352,11 @@ def _handle_refinancing_ai_query(phone: str, user_text: str, user_state: dict = 
     messages.append({"role": "user", "content": user_text})
 
     try:
-        resp = client.chat.completions.create(
-            model=MODEL_NAME,
+        reply = smart_llm_call(
             messages=messages,
             temperature=0.4,
-            max_tokens=800,
+            max_tokens=800
         )
-        reply = resp.choices[0].message.content.strip()
     except Exception as e:
         print(f"[ai] Groq error (refinancing): {e}")
         reply = (
@@ -1117,14 +1113,13 @@ Only use action intents when they clearly want to DO something specific for thei
 Respond ONLY with valid JSON:
 {{"action": "<RENEW_INSURANCE|GET_ESTIMATE|INSURANCE_HISTORY|TALK_TO_ADVISOR|NONE>", "confidence": <0.0-1.0>, "reason": "<5 words max>"}}"""
 
-        resp = client.chat.completions.create(
-            model=MODEL_NAME,
+        result = smart_llm_call(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
             max_tokens=80,
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
+            as_json=True
         )
-        result = json.loads(resp.choices[0].message.content.strip())
         action     = result.get("action", "NONE")
         confidence = float(result.get("confidence", 0.0))
         reason     = result.get("reason", "")
@@ -1193,13 +1188,11 @@ def handle_insurance_ai_query(phone: str, user_text: str,
 
     # 5. Call Groq LLM for the expert answer
     try:
-        resp = client.chat.completions.create(
-            model=MODEL_NAME,
+        reply = smart_llm_call(
             messages=messages,
             temperature=0.4,
-            max_tokens=800,
+            max_tokens=800
         )
-        reply = resp.choices[0].message.content.strip()
         print(f"[ai] ✅ Insurance expert replied | phone={phone} | query='{user_text[:50]}'")
     except Exception as e:
         print(f"[ai] Groq error (insurance expert): {e}")
@@ -1258,14 +1251,13 @@ CRITICAL: If the user is just asking a question (e.g., "what is the price", "wha
 
 Return JSON: {{"action": "BOOK_TEST_DRIVE|FINANCE_OPTIONS|TALK_TO_ADVISOR|NONE", "confidence": 0.0-1.0}}"""
         
-        resp = client.chat.completions.create(
-            model=MODEL_NAME,
+        result = smart_llm_call(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
             max_tokens=80,
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
+            as_json=True
         )
-        result = json.loads(resp.choices[0].message.content.strip())
         if result.get("confidence", 0) >= 0.8:
             return result.get("action", "NONE")
     except:
@@ -1300,13 +1292,11 @@ def handle_sales_ai_query(phone: str, user_text: str,
     messages.append({"role": "user", "content": user_text})
 
     try:
-        resp = client.chat.completions.create(
-            model=MODEL_NAME,
+        reply = smart_llm_call(
             messages=messages,
             temperature=0.4,
-            max_tokens=800,
+            max_tokens=800
         )
-        reply = resp.choices[0].message.content.strip()
     except Exception as e:
         print(f"[ai] Groq error (sales): {e}")
         reply = _keyword_fallback_sales(user_text)
@@ -1367,14 +1357,13 @@ Criteria for LIVE AGENT:
 
 Return JSON: {{"action": "TALK_TO_ADVISOR" or "NONE", "confidence": 0.0-1.0}}"""
         
-        resp = client.chat.completions.create(
-            model=MODEL_NAME,
+        result = smart_llm_call(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
             max_tokens=80,
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
+            as_json=True
         )
-        result = json.loads(resp.choices[0].message.content.strip())
         if result.get("action") == "TALK_TO_ADVISOR" and result.get("confidence", 0) >= 0.7:
             return "TALK_TO_ADVISOR"
     except:
@@ -1414,13 +1403,11 @@ def handle_used_cars_ai_query(phone: str, user_text: str,
     messages.append({"role": "user", "content": user_text})
     
     try:
-        resp = client.chat.completions.create(
-            model=MODEL_NAME,
+        reply = smart_llm_call(
             messages=messages,
             temperature=0.4,
-            max_tokens=800,
+            max_tokens=800
         )
-        reply = resp.choices[0].message.content.strip()
     except Exception as e:
         print(f"[ai] Groq error (used_cars): {e}")
         reply = _keyword_fallback_used_cars(user_text)
@@ -1481,14 +1468,13 @@ INTENTS:
 Respond ONLY with valid JSON:
 {{"action": "<BOOK_APPOINTMENT|GET_ESTIMATE|SERVICE_HISTORY|TALK_TO_ADVISOR|NONE>", "confidence": <0.0-1.0>}}"""
 
-        resp = client.chat.completions.create(
-            model=MODEL_NAME,
+        result = smart_llm_call(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
             max_tokens=50,
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
+            as_json=True
         )
-        result = json.loads(resp.choices[0].message.content.strip())
         if result.get("confidence", 0) >= 0.7:
             return result.get("action", "NONE")
     except:
@@ -1512,13 +1498,11 @@ def handle_service_ai_query(phone: str, user_text: str,
         f"=== CUSTOMER QUERY ===\n{user_text}"
     )
     try:
-        resp = client.chat.completions.create(
-            model=MODEL_NAME,
+        reply = smart_llm_call(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.4,
-            max_tokens=600,
+            max_tokens=600
         )
-        reply = resp.choices[0].message.content.strip()
     except Exception as e:
         print(f"[ai] Groq error (service): {e}")
         reply = _keyword_fallback_service(user_text)
