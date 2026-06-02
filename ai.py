@@ -821,8 +821,8 @@ PERSONA & TONE:
 STRICT RULES:
 - NEVER fabricate car details or prices not in the inventory.
 - If a specific user-requested variant is missing from inventory, suggest the closest available option or upcoming models.
-- For actions like "Book Test Drive" or "Apply for Finance": Answer the user's immediate question first, then inform them that you can help them start the process.
-- End your response with a helpful follow-up question to keep the conversation going."""
+- CRITICAL FOR BOOKINGS: NEVER attempt to book a test drive, schedule appointments, collect dates/times, or confirm bookings yourself. You are a conversational AI, you CANNOT store data in the database. If a user wants to book a test drive or apply for finance, simply say "I will now start the booking process for you" or similar, and let the system flow handle the actual data collection. Do NOT ask them for their preferred time, date, location, or personal details, as the automated flow will immediately ask these questions using interactive menus!
+- End your response with a helpful follow-up question to keep the conversation going (unless they are starting a booking)."""
 
 
 
@@ -1235,13 +1235,33 @@ def _detect_sales_follow_on_action(user_text: str, ai_reply: str) -> str:
     if any(k in user_lower for k in finance_keywords):
         return "FINANCE_OPTIONS"
 
-    # 4. LLM check for complex intent
+    # 4. Explicit sales follow-on heuristics for model-specific requests.
+    # If the user mentions a specific model or asks to buy/purchase it,
+    # continue into the NEW_CARS flow after the expert answer.
+    model_keywords = [
+        "venue n line", "creta n line", "i20 n line", "verna", "tucson",
+        "exter", "venue", "alcazar", "ioniq", "aura", "i10", "grand i10",
+        "nios", "creta", "i20"
+    ]
+    purchase_keywords = [
+        "buy", "purchase", "interested in", "looking to buy", "want to buy",
+        "need to buy", "please send", "send details", "show me details",
+        "tell me about", "give me details", "i want", "i need", "i am looking for"
+    ]
+    if any(kw in user_lower for kw in model_keywords):
+        if any(kw in user_lower for kw in purchase_keywords):
+            return "NEW_CARS"
+        # If the user mentions a model in the sales flow, show the car flow after answering.
+        return "NEW_CARS"
+
+    # 5. LLM check for complex intent
     try:
         prompt = f"""Analyze the user message and decide if we should trigger an AUTOMATIC menu/action next.
 USER: "{user_text}"
 AI REPLY: "{ai_reply[:300]}"
 
 INTENT OPTIONS:
+- NEW_CARS          -> User wants to browse cars, buy a car, or asks about a specific car model.
 - BOOK_TEST_DRIVE   -> User EXPLICITLY wants to book/schedule a drive now.
 - FINANCE_OPTIONS   -> User EXPLICITLY wants to apply for a loan/finance now.
 - TALK_TO_ADVISOR   -> User needs a human agent immediately.
@@ -1249,7 +1269,7 @@ INTENT OPTIONS:
 
 CRITICAL: If the user is just asking a question (e.g., "what is the price", "what is the down payment", "how is the mileage"), return NONE.
 
-Return JSON: {{"action": "BOOK_TEST_DRIVE|FINANCE_OPTIONS|TALK_TO_ADVISOR|NONE", "confidence": 0.0-1.0}}"""
+Return JSON: {{"action": "NEW_CARS|BOOK_TEST_DRIVE|FINANCE_OPTIONS|TALK_TO_ADVISOR|NONE", "confidence": 0.0-1.0}}"""
         
         result = smart_llm_call(
             messages=[{"role": "user", "content": prompt}],
@@ -1323,7 +1343,25 @@ def _detect_used_cars_follow_on_action(user_text: str, ai_reply: str) -> str:
     if any(k in user_lower for k in agent_keywords):
         return "TALK_TO_ADVISOR"
     
-    # Priority 2: Complex negotiation/pricing topics (Direct/LiveAgent Required)
+    # Priority 2: User is asking for used-car browsing / purchase guidance
+    model_keywords = [
+        "i20", "creta", "verna", "tucson", "exter", "venue", "alcazar",
+        "ioniq", "aura", "niro", "swift", "baleno", "civic", "city",
+        "alto", "kwid", "safari", "xuv", "scorpio", "innova"
+    ]
+    type_keywords = [
+        "hatchback", "suv", "sedan", "compact", "mpv", "coupe",
+        "convertible", "luxury", "electric", "ev", "hybrid"
+    ]
+    purchase_keywords = [
+        "buy", "purchase", "interested in", "looking for", "want", "need",
+        "show me", "show", "find", "search", "available"
+    ]
+    if any(k in user_lower for k in model_keywords + type_keywords):
+        if any(k in user_lower for k in purchase_keywords) or "used" in user_lower:
+            return "BROWSE_USED_CARS"
+
+    # Priority 3: Complex negotiation/pricing topics (Direct/LiveAgent Required)
     # Questions about specific discounts or price matching are best handled by humans
     negotiation_keywords = [
         "discount", "offer", "best price", "cheapest", "negotiate",
@@ -1333,7 +1371,7 @@ def _detect_used_cars_follow_on_action(user_text: str, ai_reply: str) -> str:
     if any(k in user_lower for k in negotiation_keywords):
         return "TALK_TO_ADVISOR"
 
-    # Priority 3: AI suggesting a human in its reply
+    # Priority 4: AI suggesting a human in its reply
     # If the AI itself says "I can connect you" or "speak with our team", 
     # we should trigger the confirmation flow.
     suggestion_keywords = [

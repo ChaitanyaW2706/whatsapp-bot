@@ -1724,6 +1724,41 @@ def handle_message(data):
                         print(f"🤖 LLM requested agent handoff for: '{text}'")
                         text = "TALK_TO_ADVISOR"
                         # Fall through to the flow handlers below to process the TALK_TO_ADVISOR action
+                    elif _follow_on and _follow_on != "NONE":
+                        send_whatsapp_message(phone, _ai_reply)
+                        print(f"🤖 LLM suggested follow-on action: {_follow_on} — continuing flow.")
+
+                        if _flow == "sales":
+                            from flows.sales import sales_flow_handler, _sales_route_after_ai_follow_on
+                            if _follow_on == "NEW_CARS":
+                                # Preserve the original car request so model extraction still works.
+                                _sales_route_after_ai_follow_on(phone, text, current_state_for_ai)
+                                return
+                            sales_flow_handler(phone, _follow_on)
+                            return
+
+                        if _flow == "used_cars":
+                            from flows.used_cars import used_cars_flow_handler
+                            used_cars_flow_handler(phone, _follow_on)
+                            return
+
+                        if _flow == "service":
+                            from flows.service import service_flow_handler
+                            service_flow_handler(phone, _follow_on)
+                            return
+
+                        if _flow == "insurance":
+                            from flows.insurance import insurance_flow_handler
+                            insurance_flow_handler(phone, _follow_on)
+                            return
+
+                        if _flow == "refinancing":
+                            from flows.refinancing import refinancing_flow_handler
+                            refinancing_flow_handler(phone, _follow_on)
+                            return
+
+                        text = _follow_on
+                        # Do not return; let the flow handler process the suggested action.
                     else:
                         send_whatsapp_message(phone, _ai_reply)
 

@@ -11,7 +11,7 @@ from db import get_full_car_details, get_latest_manufacturing_year, get_all_cars
 from utils import is_valid_appointment_slot, get_available_booking_dates, resolve_date_from_text
 
 # Initialize Groq client
-from llm_config import groq_client as client, MODEL_NAME
+from llm_config import groq_client as client, MODEL_NAME, smart_llm_call
 
 
 # ============================
@@ -88,16 +88,15 @@ CURRENT USER MESSAGE: "{user_text}"
 Analyze this message and return ONLY the JSON response with intent classification.
 """
 
-        # Call Groq
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
+        # Call smart_llm_call
+        result = smart_llm_call(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
             max_tokens=200,
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
+            as_json=True
         )
         
-        result = json.loads(response.choices[0].message.content.strip())
         print(f"🎯 AI Intent Detection Result: {result}")
         
         return result
@@ -149,56 +148,6 @@ def _sales_keyword_intent(text: str) -> str:
 
 
 # ============================================================
-# SALES — TRIGGER FOLLOW-ON (After AI Response)
-# ============================================================
-def _trigger_sales_follow_on(phone, follow_on):
-    """
-    Triggered after an AI reply is sent in the Sales flow.
-    Automatically routes the user to the correct sub-flow based on detected intent.
-    """
-    from webhook import send_list_message, send_whatsapp_message, send_button_message
-    from db import get_all_cars_paginated
-    
-    print(f"[sales] 🔀 Triggering follow-on action: {follow_on}")
-
-    if follow_on == "BOOK_TEST_DRIVE":
-        if USER_STATE[phone].get("selected_car_id"):
-            USER_STATE[phone]["state"] = "SALES_SELECT_APPOINTMENT_TYPE"
-            send_list_message(phone, "What kind of Appointment you'd like to book?", "Select Appointment",
-                [{"title": "Select Appointment Type", "rows": [
-                    {"id": "APPT_HOME_VISIT", "title": "🏠 Book a Home Visit"},
-                    {"id": "APPT_SHOWROOM",   "title": "🏢 Showroom Visit"}]}])
-        else:
-            USER_STATE[phone]["state"]    = "SALES_NEW_CARS"
-            USER_STATE[phone]["car_page"] = 1
-            result = get_all_cars_paginated(page=1, per_page=8)
-            rows = [{"id": f"MODEL_{c['id']}", "title": f"{c['make']} {c['model']}"[:24]}
-                    for c in result.get("cars", [])]
-            if result.get("has_next"): rows.append({"id": "NEXT_PAGE", "title": "➡️ Next Page"})
-            send_list_message(phone, "Please select a car first to book a test drive:", "Select Car",
-                              [{"title": "Our Cars", "rows": rows}] if rows else
-                              [{"title": "Menu", "rows": [{"id": "MAIN_MENU", "title": "🏠 Main Menu"}]}])
-
-    elif follow_on == "FINANCE_OPTIONS":
-        USER_STATE[phone]["state"] = "SALES_FINANCE"
-        msg = ("Thank you for your interest! 😊\n\n"
-               "Our Relationship Manager will contact you shortly.\n\n"
-               "🌐 Visit: www.Autosherpas.com\n📞 Call: +91-7757832783")
-        send_whatsapp_message(phone, msg)
-        send_button_message(phone, "What would you like to do next?", [
-            {"type": "reply", "reply": {"id": "PREVIOUS_MENU", "title": "⬅️ Previous Menu"}},
-            {"type": "reply", "reply": {"id": "END_CHAT",      "title": "❌ Exit Chat"}}])
-
-    elif follow_on == "TALK_TO_ADVISOR":
-        from flows.service import bot
-        bot.trigger_human_agent_confirmation(phone)
-        USER_STATE[phone]["state"] = "SALES_AGENT_CONFIRMATION"
-
-    else:
-        print(f"[sales] _trigger_sales_follow_on: no action needed for {follow_on}")
-
-
-# ============================================================
 # SALES — CENTRAL AI ROUTER  (called from every state)
 # Groq AI → keyword fallback → action.  User NEVER gets stuck.
 # ============================================================
@@ -236,11 +185,12 @@ def _sales_route_via_ai(phone, text, state):
     # ── Keyword-based car model extraction (typo-safe fallback) ──────────
     if not extracted_car_model:
         t = text.lower()
-        car_keywords = ["i20", "creta", "verna", "tucson", "exter", "venue",
+        car_keywords = ["venue n line", "creta n line", "i20 n line", "venue n-line", "creta n-line", "i20 n-line", 
+                        "i20", "creta", "verna", "tucson", "exter", "venue",
                         "alcazar", "ioniq", "aura", "i10", "grand i10", "nios"]
         for kw in car_keywords:
             if kw in t:
-                extracted_car_model = kw
+                extracted_car_model = kw.replace("-", " ") # normalize n-line to n line
                 break
 
     print(f"✅ Final sales intent: {intent} | car_model: {extracted_car_model}")
@@ -257,8 +207,12 @@ def _sales_route_via_ai(phone, text, state):
             send_whatsapp_message(phone, ai_reply)
             
             if follow_on and follow_on != "NONE":
-                _trigger_sales_follow_on(phone, follow_on)
-            return # Stop here — do NOT show canned menus for questions
+                intent = follow_on
+                
+            # If the user is just asking a general question and no action intent is detected, stop here.
+            # Otherwise, allow the action intent block below to trigger the structured flow menus.
+            if intent == "GENERAL_QUERY":
+                return
         except Exception as _e:
             print(f"[sales] AI Expert error, falling back to intent logic: {_e}")
 
@@ -366,6 +320,90 @@ def _sales_route_via_ai(phone, text, state):
     else:
         # Fallback for anything else (should be rare now)
         handle_sales(phone)
+
+
+def _sales_route_after_ai_follow_on(phone, text, state):
+    """Route sales follow-on actions after the AI has already replied.
+
+    This preserves the original user message for model extraction and
+    avoids running the full AI expert flow a second time.
+    """
+    from webhook import send_whatsapp_message, send_list_message
+
+    extracted_car_model = None
+    t = text.lower()
+    car_keywords = [
+        "venue n line", "creta n line", "i20 n line", "venue n-line", "creta n-line", "i20 n-line",
+        "i20", "creta", "verna", "tucson", "exter", "venue",
+        "alcazar", "ioniq", "aura", "i10", "grand i10", "nios"
+    ]
+    for kw in car_keywords:
+        if kw in t:
+            extracted_car_model = kw.replace("-", " ")
+            break
+
+    resolved_cartype = _resolve_car_type_keyword(phone, text)
+    if resolved_cartype:
+        print(f"🚗 Sales follow-on detected car type keyword: '{text}' → {resolved_cartype}")
+        sales_flow_handler(phone, resolved_cartype)
+        return
+
+    if extracted_car_model:
+        import mysql.connector
+        from config import DB_CONFIG
+        try:
+            conn = mysql.connector.connect(**DB_CONFIG)
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("""
+                SELECT id, make, model FROM sales_car_details
+                WHERE LOWER(model) LIKE %s
+                ORDER BY `Ex-Showroom Price Base Model` DESC LIMIT 1
+            """, (f"%{extracted_car_model.lower()}%",))
+            matched_car = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            if matched_car:
+                print(f"🚗 Direct car match after AI follow-on: {matched_car['make']} {matched_car['model']} (id={matched_car['id']})")
+                USER_STATE[phone]["selected_car_id"] = str(matched_car["id"])
+                USER_STATE[phone]["selected_model_name"] = matched_car["model"]
+                show_model_details_with_great_choice(phone)
+                return
+        except Exception as db_err:
+            print(f"❌ Car search error in follow-on routing: {db_err}")
+
+    selected_type_id = USER_STATE.get(phone, {}).get("selected_car_type_id")
+    if selected_type_id:
+        try:
+            from db import get_cars_by_type_id
+            cars = get_cars_by_type_id(selected_type_id)
+            if cars:
+                USER_STATE[phone]["state"] = "SALES_NEW_CARS"
+                USER_STATE[phone]["car_page"] = 1
+                rows = [{"id": f"MODEL_{c['id']}", "title": f"{c['make']} {c['model']}"[:24]}
+                        for c in cars]
+                send_list_message(phone, "Here are our cars (Premium → Entry Level):", "Select Car",
+                                  [{"title": "Available Cars", "rows": rows}])
+                return
+        except Exception as e:
+            print(f"❌ Error fetching filtered cars by selected type: {e}")
+
+    # Fallback: show full car list if no specific model or type was matched
+    USER_STATE[phone]["state"] = "SALES_NEW_CARS"
+    USER_STATE[phone]["car_page"] = 1
+    result = get_all_cars_paginated(page=1, per_page=8)
+    if not result["cars"]:
+        send_whatsapp_message(phone, "No cars available at the moment 😕")
+        return
+
+    rows = [{"id": f"MODEL_{c['id']}", "title": f"{c['make']} {c['model']}"[:24]}
+            for c in result["cars"]]
+    if result["has_next"]:
+        rows.append({"id": "NEXT_PAGE", "title": "➡️ Next Page"})
+    if result["has_prev"]:
+        rows.append({"id": "PREV_PAGE", "title": "⬅️ Previous Page"})
+    send_list_message(phone, "Here are our cars (Premium → Entry Level):", "Select Car",
+                      [{"title": f"Our Cars (Page {result['page']} of {result['total_pages']})", "rows": rows}])
 
 
 def save_base64_to_image_and_get_url(model_name, base64_str):

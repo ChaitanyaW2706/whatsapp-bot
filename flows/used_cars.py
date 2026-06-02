@@ -1111,6 +1111,24 @@ def used_cars_flow_handler(phone, text):
     # ========================================
     # MAIN MENU HANDLING
     # ========================================
+    if text == "BROWSE_USED_CARS" and state in (None, "USED_CARS_MENU", "USED_SELECT_BUDGET", "USED_SELECT_TYPE", "USED_SELECT_BRAND", "USED_SHOW_CARS", "USED_CONFIRM_CHANGE"):
+        USER_STATE[phone]["state"] = "USED_SELECT_BUDGET"
+        log_user_activity(phone, "used_car")   # ✅ track browse selection
+
+        sections = [{
+            "title": "Select Budget",
+            "rows": [
+                {"id": "under1", "title": "Under ₹1 Lakhs"},
+                {"id": "1-3", "title": "₹1–3 Lakhs"},
+                {"id": "3-5", "title": "₹3–5 Lakhs"},
+                {"id": "5-10", "title": "₹5–10 Lakhs"},
+                {"id": "above10", "title": "Above ₹10 Lakhs"}
+            ]
+        }]
+
+        send_list_message(phone, "Great choice! Let's find your perfect car. First, what's your budget range?", "Select", sections)
+        return
+
     if state == "USED_CARS_MENU":
         if text == "USED_BROWSE":
             USER_STATE[phone]["state"] = "USED_SELECT_BUDGET"

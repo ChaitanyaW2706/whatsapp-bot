@@ -11,7 +11,7 @@ load_dotenv()
 
 # Centralized Model Name
 MODEL_NAME = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
-SECONDARY_MODEL_NAME = "llama3-8b-8192"
+SECONDARY_MODEL_NAME = "llama-3.1-8b-instant"
 
 # Centralized Groq Client Instance
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -65,11 +65,11 @@ def smart_llm_call(messages: list, temperature: float = 0.1, max_tokens: int = 8
         print(f"[llm] Secondary Groq error ({SECONDARY_MODEL_NAME}): {e}")
 
     # Attempt 3: Ultimate Fallback to Gemini
-    print(f"[llm] Ultimate fallback to Gemini model: gemini-1.5-flash")
+    print(f"[llm] Ultimate fallback to Gemini model: gemini-1.5-flash-latest")
     if not GEMINI_API_KEY:
         raise Exception("All Groq models failed and GEMINI_API_KEY is not set.")
         
-    gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+    gemini_model = genai.GenerativeModel("gemini-1.5-flash-latest")
     prompt = _convert_messages_for_gemini(messages)
     
     # Configure generation
