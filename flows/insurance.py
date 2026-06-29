@@ -17,6 +17,8 @@ from utils import (
     classify_insurance_intent_request,
     is_insurance_knowledge_query,
     understand_customer_in_flow_context,
+    validate_and_format_renewal_type,
+    is_valid_vehicle_reg,
 )
 
 
@@ -98,9 +100,8 @@ def _resolve_renewal_type_from_text(text: str) -> str | None:
         (["3rd", "third", "3 renewal", "3rd renewal", "third renewal"], "RENEW_3RD"),
         (["4th", "fourth", "4 renewal", "4th renewal", "fourth renewal"], "RENEW_4TH"),
         (["5th", "fifth", "5 renewal", "5th renewal", "fifth renewal"], "RENEW_5TH"),
-        (["6th", "seventh", "eighth", "ninth", "tenth", "6 renewal", "many",
-          "multiple", "lots of", "above 5", "more than 5", "6 and above",
-          "6th and above", "6th renewal", "seventh renewal"], "RENEW_6TH_ABOVE"),
+        (["6th", "6 renewal", "6th renewal"], "RENEW_6TH_ABOVE"),
+        (["other", "specify", "custom", "manually"], "RENEW_OTHER"),
     ]
     for keywords, btn_id in keyword_map:
         if any(k in t for k in keywords):
@@ -117,7 +118,8 @@ IDs:
 - "RENEW_3RD"       → 3rd / third renewal
 - "RENEW_4TH"       → 4th / fourth renewal
 - "RENEW_5TH"       → 5th / fifth renewal
-- "RENEW_6TH_ABOVE" → 6th or more renewals
+- "RENEW_6TH_ABOVE" → 6th renewal
+- "RENEW_OTHER"     → other renewal type (7th, 8th, or any other custom number of renewals)
 - "RENEW_NEW"       → new policy / first time buying insurance / never had policy
 
 USER MESSAGE: "{text}"
@@ -428,10 +430,13 @@ def _reprompt_current_field(phone: str, state: str):
                     {"id": "RENEW_3RD",       "title": "3rd Renewal"},
                     {"id": "RENEW_4TH",       "title": "4th Renewal"},
                     {"id": "RENEW_5TH",       "title": "5th Renewal"},
-                    {"id": "RENEW_6TH_ABOVE", "title": "6th Renewal & Above"},
-                    {"id": "RENEW_NEW",       "title": "New Policy / First Time"}
+                    {"id": "RENEW_6TH_ABOVE", "title": "6th Renewal"},
+                    {"id": "RENEW_NEW",       "title": "New Policy / First Time"},
+                    {"id": "RENEW_OTHER",     "title": "Other (Type Manually)"}
                 ]}]
             )
+        elif state == "STATE_4_RENEW_TYPE_OTHER":
+            send_whatsapp_message(phone, "✏️ Please type your renewal type:")
         elif state == "STATE_4_MODE":
             send_list_message(
                 phone,
@@ -489,6 +494,7 @@ def _reprompt_current_field(phone: str, state: str):
 # Used to build the context-aware re-prompt after answering a query.
 _MID_FLOW_STATE_CONTEXT = {
     "STATE_4_RENEW_TYPE":    "renewal type",
+    "STATE_4_RENEW_TYPE_OTHER": "custom renewal type",
     "STATE_4_MODE":          "appointment mode (Online / Walk-In / Field Visit)",
     "STATE_4_DATE":          "preferred appointment date",
     "STATE_4_LATER_WEEK":    "specific date this week",
@@ -907,7 +913,7 @@ def _trigger_follow_on(phone: str, follow_on: str, vehicle_reg: str):
     print(f"[insurance] _trigger_follow_on | phone={phone} | action={follow_on}")
 
     _mid_flow_states = {
-        "STATE_4_RENEW_TYPE", "STATE_4_MODE", "STATE_4_DATE",
+        "STATE_4_RENEW_TYPE", "STATE_4_RENEW_TYPE_OTHER", "STATE_4_MODE", "STATE_4_DATE",
         "STATE_4_LATER_WEEK", "STATE_4_NEXT_WEEK", "STATE_4_SLOT",
         "STATE_4_NAME", "STATE_4_ADDRESS", "STATE_4_DONE",
         "INSURANCE_ESTIMATE_NAME", "INSURANCE_ESTIMATE_LINK_SENT",
@@ -1390,8 +1396,9 @@ def _action_start_renewal(phone):
                 {"id": "RENEW_3RD",       "title": "3rd Renewal"},
                 {"id": "RENEW_4TH",       "title": "4th Renewal"},
                 {"id": "RENEW_5TH",       "title": "5th Renewal"},
-                {"id": "RENEW_6TH_ABOVE", "title": "6th Renewal & Above"},
-                {"id": "RENEW_NEW",       "title": "New Policy / First Time"}
+                {"id": "RENEW_6TH_ABOVE", "title": "6th Renewal"},
+                {"id": "RENEW_NEW",       "title": "New Policy / First Time"},
+                {"id": "RENEW_OTHER",     "title": "Other (Type Manually)"}
             ]
         }]
     )
@@ -1669,6 +1676,7 @@ def get_user_from_token(phone: str, token_val: str):
 # MAIN FLOW HANDLER
 # ============================
 def insurance_flow_handler(phone, text):
+    from utils import is_genuine_query
     # ── Normalise interactive payload ───────────────────────────────────
     if isinstance(text, dict):
         if "interactive" in text:
@@ -1835,10 +1843,9 @@ def insurance_flow_handler(phone, text):
 
     # ── VEHICLE LOOKUP ───────────────────────────────────────────────────
     if state == "INSURANCE_LOOKUP":
-        # Remove all spaces and special characters for a clean lookup
-        cleaned = "".join(c for c in text if c.isalnum()).upper()
-        if len(cleaned) >= 4:
-            reg_no = cleaned
+        is_valid, cleaned_reg = is_valid_vehicle_reg(text)
+        if is_valid:
+            reg_no = cleaned_reg
             USER_STATE[phone]["data"]["reg_no"] = reg_no
             vehicle = get_vehicle_from_db(reg_no)
             if vehicle:
@@ -1855,8 +1862,12 @@ def insurance_flow_handler(phone, text):
             else:
                 send_whatsapp_message(
                     phone,
-                    "⚠️ Please enter a valid *Vehicle Registration Number*.\n"
-                    "Example: KA01AB1234"
+                    "⚠️ The registration number you entered does not match standard Indian formats.\n\n"
+                    "Please provide a valid registration number to continue.\n\n"
+                    "Examples:\n"
+                    "• Standard: *KA01AB1234* or *MH 01 AB 1234*\n"
+                    "• Bharat Series: *22BH1234AA*\n"
+                    "• Commercial: *DL 1T 2468*"
                 )
         return
 
@@ -1890,16 +1901,7 @@ def insurance_flow_handler(phone, text):
         if text == "1":
             _action_start_estimate(phone)
         elif text == "2":
-            USER_STATE[phone]["state"] = "STATE_4_RENEW_TYPE"
-            USER_STATE[phone]["renew"] = {"vehicle": "New Customer", "mobile": phone}
-            send_list_message(
-                phone,
-                "Please select your renewal type:",
-                "Select Renewal Type",
-                [{"title": "Renewal Type", "rows": [
-                    {"id": "RENEW_NEW", "title": "New Policy / First Time"}
-                ]}]
-            )
+            _action_start_renewal(phone)
         elif text == "3":
             USER_STATE[phone]["state"] = "INSURANCE_LOOKUP"
             send_whatsapp_message(
@@ -1920,14 +1922,29 @@ def insurance_flow_handler(phone, text):
         else:
             # Free text input in NOT_FOUND state:
             # - If it's a genuine question → route to AI
-            # - Otherwise (vehicle reg, form input, etc.) → re-show menu
+            # - Check if it looks like a registration number
+            # - Otherwise → re-show menu
             from utils import is_genuine_query
             if is_genuine_query(text, state):
                 _route_via_ai(phone, text, state)
             else:
-                # Not a genuine query — re-show the not found menu
-                reg_no = USER_STATE[phone].get("data", {}).get("reg_no", "")
-                _action_show_not_found_menu(phone, reg_no)
+                cleaned = "".join(c for c in text if c.isalnum()).upper()
+                if len(cleaned) >= 4:
+                    reg_no = cleaned
+                    USER_STATE[phone]["data"]["reg_no"] = reg_no
+                    vehicle = get_vehicle_from_db(reg_no)
+                    if vehicle:
+                        USER_STATE[phone]["data"]["vehicle_found"] = True
+                        USER_STATE[phone]["state"] = "INSURANCE_VEHICLE_FOUND"
+                        _action_show_main_menu(phone, vehicle)
+                    else:
+                        USER_STATE[phone]["data"]["vehicle_found"] = False
+                        USER_STATE[phone]["state"] = "INSURANCE_NOT_FOUND"
+                        _action_show_not_found_menu(phone, reg_no)
+                else:
+                    # Not a genuine query and not a valid reg no — re-show the not found menu
+                    reg_no = USER_STATE[phone].get("data", {}).get("reg_no", "")
+                    _action_show_not_found_menu(phone, reg_no)
         return
 
     # ── ESTIMATE: collect customer name ──────────────────────────────────
@@ -1957,19 +1974,22 @@ def insurance_flow_handler(phone, text):
             return
 
         # ── 3. Valid name → proceed ───────────────────────────────────────
-        if _is_valid_name(text):
-            USER_STATE[phone]["data"]["customer_name"] = text
+        # ── 3. Valid name → proceed ───────────────────────────────────────
+        from utils import validate_and_clean_name
+        is_valid, clean_name, fallback_msg = validate_and_clean_name(text)
+        if is_valid:
+            USER_STATE[phone]["data"]["customer_name"] = clean_name
             vehicle_reg      = USER_STATE[phone]["data"].get("reg_no", "N/A")
-            tok              = generate_upload_token(phone, text, vehicle_reg)
+            tok              = generate_upload_token(phone, clean_name, vehicle_reg)
             formatted_mobile = format_mobile(phone)
             upload_link      = f"{BASE_URL}/upload-estimate?token={tok}&mobile={formatted_mobile}"
 
             message = (
-                f"Thank you, {text}! 📄\n\n"
+                f"Thank you, {clean_name}! 📄\n\n"
                 f"*Click this link to upload your document:*\n"
                 f"🔗 {upload_link}\n\n"
                 f"💡 *Your details are pre-filled:*\n"
-                f"• Name: {text}\n"
+                f"• Name: {clean_name}\n"
                 f"• Mobile: {format_mobile(phone)}\n"
                 f"• Vehicle: {vehicle_reg}\n\n"
                 f"After uploading, we'll contact you within 2 hours! 🚗"
@@ -1991,38 +2011,7 @@ def insurance_flow_handler(phone, text):
             if is_genuine_query(text, state):
                 _route_via_ai(phone, text, state)
             else:
-                # Could be a garbled refusal or unrecognised input —
-                # let LLM decide one more time before re-prompting
-                try:
-                    prompt = f"""A customer is being asked for their name in an insurance flow.
-They replied: "{text}"
-
-Is this clearly:
-A) An attempt to provide their name
-B) Something else (refusal, question, unrelated message)
-
-Reply ONLY with JSON: {{"is_name_attempt": true/false}}"""
-                    resp = client.chat.completions.create(
-                        model=MODEL_NAME,
-                        messages=[{"role": "user", "content": prompt}],
-                        temperature=0.1,
-                        max_tokens=30,
-                        response_format={"type": "json_object"}
-                    )
-                    r = json.loads(resp.choices[0].message.content.strip())
-                    if not r.get("is_name_attempt", True):
-                        # Not a name attempt — offer graceful exit
-                        _offer_graceful_exit(
-                            phone,
-                            "No problem! 😊 Would you like to go back to the main menu or end the chat?"
-                        )
-                        return
-                except Exception as _e:
-                    print(f"[insurance] name-attempt LLM check error: {_e}")
-                send_whatsapp_message(
-                    phone,
-                    "⚠️ Please share your *full name* to proceed with the estimate."
-                )
+                send_whatsapp_message(phone, fallback_msg)
         return
 
     # ── ESTIMATE: link sent — wait for upload or nav buttons ────────────
@@ -2062,18 +2051,50 @@ Reply ONLY with JSON: {{"is_name_attempt": true/false}}"""
             "RENEW_3RD":       "3rd Renewal",
             "RENEW_4TH":       "4th Renewal",
             "RENEW_5TH":       "5th Renewal",
-            "RENEW_6TH_ABOVE": "6th Renewal & Above",
+            "RENEW_6TH_ABOVE": "6th Renewal",
             "RENEW_NEW":       "New Policy / First Time",
-            "First Renewal":           "First Renewal",
-            "2nd Renewal":             "2nd Renewal",
-            "3rd Renewal":             "3rd Renewal",
-            "4th Renewal":             "4th Renewal",
-            "5th Renewal":             "5th Renewal",
-            "6th Renewal & Above":     "6th Renewal & Above",
-            "New Policy / First Time": "New Policy / First Time",
+            "RENEW_OTHER":     "Other (Type Manually)",
+            "First Renewal":                 "First Renewal",
+            "2nd Renewal":                   "2nd Renewal",
+            "3rd Renewal":                   "3rd Renewal",
+            "4th Renewal":                   "4th Renewal",
+            "5th Renewal":                   "5th Renewal",
+            "6th Renewal":                   "6th Renewal",
+            "New Policy / First Time":       "New Policy / First Time",
+            "Other (Type Manually)": "Other (Type Manually)",
         }
+        
         selected = type_map.get(text)
+        
+        # Free-text check for "other" or "specify" or "manually"
+        if not selected:
+            t = text.lower().strip()
+            if any(k in t for k in ["other", "specify", "custom", "manually"]):
+                selected = "Other (Type Manually)"
+                
         if selected:
+            if selected == "Other (Type Manually)":
+                is_opt_selection = (text == "RENEW_OTHER" or text == "Other (Type Manually)" or text.lower().strip() in ["other", "specify", "custom", "manually"])
+                if not is_opt_selection:
+                    is_valid, formatted_val, _ = validate_and_format_renewal_type(text)
+                    if is_valid:
+                        USER_STATE[phone]["renew"]["renewal_type"] = formatted_val
+                        USER_STATE[phone]["state"] = "STATE_4_MODE"
+                        send_list_message(
+                            phone,
+                            f"✅ Got it — *{formatted_val}*.\n\nHow would you like to proceed?",
+                            "Select",
+                            [{"title": "Proceed Options", "rows": [
+                                {"id": "MODE_ONLINE", "title": "Online"},
+                                {"id": "MODE_WALKIN", "title": "Walk-In"},
+                                {"id": "MODE_FIELD",  "title": "Field Visit"}
+                            ]}]
+                        )
+                        return
+                USER_STATE[phone]["state"] = "STATE_4_RENEW_TYPE_OTHER"
+                send_whatsapp_message(phone, "✏️ Please type your renewal type:")
+                return
+                
             USER_STATE[phone]["renew"]["renewal_type"] = selected
             USER_STATE[phone]["state"] = "STATE_4_MODE"
             send_list_message(
@@ -2092,6 +2113,27 @@ Reply ONLY with JSON: {{"is_name_attempt": true/false}}"""
             if resolved:
                 selected = type_map.get(resolved)
                 if selected:
+                    if selected == "Other (Type Manually)":
+                        is_opt_selection = (text == "RENEW_OTHER" or text == "Other (Type Manually)" or text.lower().strip() in ["other", "specify", "custom", "manually"])
+                        if not is_opt_selection:
+                            is_valid, formatted_val, _ = validate_and_format_renewal_type(text)
+                            if is_valid:
+                                USER_STATE[phone]["renew"]["renewal_type"] = formatted_val
+                                USER_STATE[phone]["state"] = "STATE_4_MODE"
+                                send_list_message(
+                                    phone,
+                                    f"✅ Got it — *{formatted_val}*.\n\nHow would you like to proceed?",
+                                    "Select",
+                                    [{"title": "Proceed Options", "rows": [
+                                        {"id": "MODE_ONLINE", "title": "Online"},
+                                        {"id": "MODE_WALKIN", "title": "Walk-In"},
+                                        {"id": "MODE_FIELD",  "title": "Field Visit"}
+                                    ]}]
+                                )
+                                return
+                        USER_STATE[phone]["state"] = "STATE_4_RENEW_TYPE_OTHER"
+                        send_whatsapp_message(phone, "✏️ Please type your renewal type:")
+                        return
                     USER_STATE[phone]["renew"]["renewal_type"] = selected
                     USER_STATE[phone]["state"] = "STATE_4_MODE"
                     send_list_message(
@@ -2105,6 +2147,24 @@ Reply ONLY with JSON: {{"is_name_attempt": true/false}}"""
                         ]}]
                     )
                     return
+            
+            # As a last fallback, try to validate the text directly as a custom renewal type
+            is_valid, formatted_val, _ = validate_and_format_renewal_type(text)
+            if is_valid:
+                USER_STATE[phone]["renew"]["renewal_type"] = formatted_val
+                USER_STATE[phone]["state"] = "STATE_4_MODE"
+                send_list_message(
+                    phone,
+                    f"✅ Got it — *{formatted_val}*.\n\nHow would you like to proceed?",
+                    "Select",
+                    [{"title": "Proceed Options", "rows": [
+                        {"id": "MODE_ONLINE", "title": "Online"},
+                        {"id": "MODE_WALKIN", "title": "Walk-In"},
+                        {"id": "MODE_FIELD",  "title": "Field Visit"}
+                    ]}]
+                )
+                return
+
             # Could not resolve → show list again
             send_list_message(
                 phone,
@@ -2116,10 +2176,49 @@ Reply ONLY with JSON: {{"is_name_attempt": true/false}}"""
                     {"id": "RENEW_3RD",       "title": "3rd Renewal"},
                     {"id": "RENEW_4TH",       "title": "4th Renewal"},
                     {"id": "RENEW_5TH",       "title": "5th Renewal"},
-                    {"id": "RENEW_6TH_ABOVE", "title": "6th Renewal & Above"},
-                    {"id": "RENEW_NEW",       "title": "New Policy / First Time"}
+                    {"id": "RENEW_6TH_ABOVE", "title": "6th Renewal"},
+                    {"id": "RENEW_NEW",       "title": "New Policy / First Time"},
+                    {"id": "RENEW_OTHER",     "title": "Other (Type Manually)"}
                 ]}]
             )
+        return
+
+    # ── RENEWAL: custom renewal type ─────────────────────────────────────
+    if state == "STATE_4_RENEW_TYPE_OTHER":
+        # ── ALWAYS check exit intent FIRST ──────────────────────────────
+        exit_intent = _detect_mid_flow_intent(text)
+        if exit_intent in ("CANCEL", "BACK", "END_CHAT"):
+            _handle_mid_flow_exit(phone, exit_intent)
+            return
+        if exit_intent == "GET_ESTIMATE":
+            _action_start_estimate(phone)
+            return
+        if exit_intent == "TALK_TO_ADVISOR":
+            USER_STATE[phone]["state"] = "STATE_5_ADVISOR"
+            _action_send_advisor(phone)
+            return
+
+        # ── Knowledge query interceptor ─────────────────────────────────
+        if _handle_mid_flow_knowledge_query(phone, text, state):
+            return
+
+        is_valid, formatted_val, fallback_msg = validate_and_format_renewal_type(text)
+        if not is_valid:
+            send_whatsapp_message(phone, fallback_msg)
+            return
+
+        USER_STATE[phone]["renew"]["renewal_type"] = formatted_val
+        USER_STATE[phone]["state"] = "STATE_4_MODE"
+        send_list_message(
+            phone,
+            "How would you like to proceed?",
+            "Select",
+            [{"title": "Proceed Options", "rows": [
+                {"id": "MODE_ONLINE", "title": "Online"},
+                {"id": "MODE_WALKIN", "title": "Walk-In"},
+                {"id": "MODE_FIELD",  "title": "Field Visit"}
+            ]}]
+        )
         return
 
     # ── RENEWAL: mode ────────────────────────────────────────────────────
@@ -2466,6 +2565,11 @@ Reply ONLY with JSON: {{"is_name_attempt": true/false}}"""
         }
         selected = slot_map.get(text)
         if selected:
+            from utils import is_booking_date_today, is_slot_available_today
+            if is_booking_date_today(phone) and not is_slot_available_today(text, selected):
+                send_whatsapp_message(phone, "⚠️ That time slot has already passed for today. Please choose an available slot:")
+                _action_send_slot_list(phone)
+                return
             USER_STATE[phone]["renew"]["slot"] = selected
             USER_STATE[phone]["state"] = "STATE_4_NAME"
             send_whatsapp_message(phone, "Please confirm your name:")
@@ -2489,6 +2593,11 @@ Reply ONLY with JSON: {{"is_name_attempt": true/false}}"""
 
             if resolved_slot:
                 selected = slot_map.get(resolved_slot)
+                from utils import is_booking_date_today, is_slot_available_today
+                if is_booking_date_today(phone) and not is_slot_available_today(resolved_slot, selected):
+                    send_whatsapp_message(phone, "⚠️ That time slot has already passed for today. Please choose an available slot:")
+                    _action_send_slot_list(phone)
+                    return
                 USER_STATE[phone]["renew"]["slot"] = selected
                 USER_STATE[phone]["state"] = "STATE_4_NAME"
                 send_whatsapp_message(phone, f"✅ Got it — *{selected}*.\n\nPlease confirm your name:")
@@ -2517,13 +2626,16 @@ Reply ONLY with JSON: {{"is_name_attempt": true/false}}"""
             return
 
         name_input = text.strip()
-        if _is_likely_name(name_input) and any(c.isalpha() for c in name_input):
-            USER_STATE[phone]["renew"]["name"] = name_input
+        from utils import validate_and_clean_name
+        is_valid, clean_name, fallback_msg = validate_and_clean_name(name_input)
+
+        if is_valid:
+            USER_STATE[phone]["renew"]["name"] = clean_name
             if "FIELD" in USER_STATE[phone]["renew"].get("mode", "").upper():
                 USER_STATE[phone]["state"] = "STATE_4_ADDRESS"
                 send_whatsapp_message(
                     phone,
-                    f"Thank you, {name_input}! 👤\n\n"
+                    f"Thank you, {clean_name}! 👤\n\n"
                     "Since you selected *Field Visit*, please share the address where our advisor should visit:"
                 )
             else:
@@ -2539,11 +2651,7 @@ Reply ONLY with JSON: {{"is_name_attempt": true/false}}"""
             if is_genuine_query(text, state):
                 _route_via_ai(phone, text, state)
             else:
-                send_whatsapp_message(
-                    phone,
-                    "⚠️ Please enter a valid name (minimum 2 letters).\n"
-                    "Example: John Smith"
-                )
+                send_whatsapp_message(phone, fallback_msg)
         return
 
     # ── RENEWAL: address for field visit ────────────────────────────

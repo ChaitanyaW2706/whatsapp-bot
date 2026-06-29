@@ -416,12 +416,20 @@ def save_base64_to_image_and_get_url(model_name, base64_str):
         # Create directory if it doesn't exist
         os.makedirs("static/cars", exist_ok=True)
 
+        # Decode
+        image_data = base64.b64decode(base64_str)
+        
+        # Detect extension via magic bytes
+        ext = "jpg"
+        if image_data.startswith(b'\xff\xd8\xff'): ext = "jpg"
+        elif image_data.startswith(b'\x89PNG\r\n\x1a\n'): ext = "png"
+        elif image_data.startswith(b'RIFF') and image_data[8:12] == b'WEBP': ext = "webp"
+
         # Clean filename
-        filename = f"{model_name.lower().replace(' ', '_')}.jpg"
+        filename = f"{model_name.lower().replace(' ', '_')}.{ext}"
         filepath = os.path.join("static", "cars", filename)
 
-        # Decode and save
-        image_data = base64.b64decode(base64_str)
+        # Save file
         with open(filepath, "wb") as f:
             f.write(image_data)
 
@@ -580,10 +588,20 @@ def send_messages_in_strict_order(phone):
         # Get latest manufacturing year for this car
         latest_year = get_latest_manufacturing_year(car_id)
 
+        import re
+        def format_indian_currency(val):
+            try:
+                s = str(int(val))
+                if len(s) <= 3: return f"₹ {s}"
+                formatted_num = re.sub(r'(\d)(?=(\d\d)+\d$)', r'\1,', s)
+                return f"₹ {formatted_num}"
+            except:
+                return "Price on request"
+
         # Format on-road price with ₹ symbol and commas
         try:
             on_road_val = car.get('on_road_price') or 0
-            formatted_price = f"₹{int(on_road_val):,}"
+            formatted_price = format_indian_currency(on_road_val).replace("₹ ", "₹")
         except (ValueError, TypeError):
             formatted_price = "Price on request"
 
@@ -666,24 +684,21 @@ def send_messages_in_strict_order(phone):
                     import gridfs
                     from config import MONGO_URI
                     
-                    url_path = json.loads(base64_image)[0] if base64_image.startswith("[") else base64_image
+                    parsed = json.loads(base64_image) if base64_image.startswith("[") else base64_image
+                    url_path = parsed[0] if isinstance(parsed, list) and parsed else (parsed if isinstance(parsed, str) else None)
                     
-                    if url_path.startswith("http"):
-                        image_url = url_path
-                    else:
-                        file_id = url_path.split("/")[-1]
-                        client = MongoClient(MONGO_URI)
-                        db = client["whatsapp_bot"]
-                        fs = gridfs.GridFS(db)
-                        
-                        grid_out = fs.get(ObjectId(file_id))
-                        os.makedirs("static/cars", exist_ok=True)
-                        filename = f"{car['make'].lower()}_{car['model'].lower().replace(' ', '_')}.jpg"
-                        filepath = os.path.join("static", "cars", filename)
-                        with open(filepath, "wb") as f:
-                            f.write(grid_out.read())
-                        image_url = f"{BASE_URL}/static/cars/{filename}"
-                        print(f"✅ Extracted image directly from MongoDB GridFS: {image_url}")
+                    if url_path:
+                        file_id = None
+                        if "/images/" in url_path:
+                            file_id = url_path.split("/images/")[1].split("/")[0]
+                        elif not url_path.startswith("http"):
+                            file_id = url_path.split("/")[-1]
+                            
+                        if file_id:
+                            image_url = f"{BASE_URL.rstrip('/')}/db_image/{file_id}"
+                            print(f"✅ Pointing image directly to MongoDB GridFS endpoint: {image_url}")
+                        elif url_path.startswith("http"):
+                            image_url = url_path
                 except Exception as e:
                     print(f"❌ Failed to extract image from MongoDB: {e}")
             else:
@@ -706,12 +721,12 @@ def send_messages_in_strict_order(phone):
         print("3️⃣ STEP 3: Sending car details...")
 
         try:
-            ex_price = f"₹ {int(car.get('ex_showroom_price', 0)):,}"
+            ex_price = format_indian_currency(car.get('ex_showroom_price', 0))
         except (ValueError, TypeError):
             ex_price = "Price on request"
             
         try:
-            onroad_price = f"₹ {int(car.get('on_road_price', 0)):,}"
+            onroad_price = format_indian_currency(car.get('on_road_price', 0))
         except (ValueError, TypeError):
             onroad_price = "Price on request"
             
@@ -751,24 +766,15 @@ def send_messages_in_strict_order(phone):
                     import gridfs
                     from config import MONGO_URI
                     
-                    url_path = json.loads(base64_pdf)[0] if base64_pdf.startswith("[") else base64_pdf
+                    parsed = json.loads(base64_pdf) if base64_pdf.startswith("[") else base64_pdf
+                    url_path = parsed[0] if isinstance(parsed, list) and parsed else (parsed if isinstance(parsed, str) else None)
                     
-                    if url_path.startswith("http"):
+                    if url_path and url_path.startswith("http"):
                         pdf_url = url_path
-                    else:
+                    elif url_path:
                         file_id = url_path.split("/")[-1]
-                        client = MongoClient(MONGO_URI)
-                        db = client["whatsapp_bot"]
-                        fs = gridfs.GridFS(db)
-                        
-                        grid_out = fs.get(ObjectId(file_id))
-                        os.makedirs("static/brochures", exist_ok=True)
-                        filename = f"{car['make'].lower()}_{car['model'].lower().replace(' ', '_')}_brochure.pdf"
-                        filepath = os.path.join("static", "brochures", filename)
-                        with open(filepath, "wb") as f:
-                            f.write(grid_out.read())
-                        pdf_url = f"{BASE_URL}/static/brochures/{filename}"
-                        print(f"✅ Extracted PDF directly from MongoDB GridFS: {pdf_url}")
+                        pdf_url = f"{BASE_URL.rstrip('/')}/db_image/{file_id}"
+                        print(f"✅ Pointing PDF directly to MongoDB GridFS endpoint: {pdf_url}")
                 except Exception as e:
                     print(f"❌ Failed to extract PDF from MongoDB: {e}")
             else:
@@ -1658,6 +1664,16 @@ def sales_flow_handler(phone, text):
         }
         
         if text in time_map:
+            from utils import is_booking_date_today, is_slot_available_today
+            if is_booking_date_today(phone) and not is_slot_available_today(text, time_map[text]):
+                send_whatsapp_message(phone, "⚠️ That time slot has already passed for today. Please choose an available slot:")
+                sections = [{"title": "Select Time Slot", "rows": [
+                    {"id": "TIME_MORNING",   "title": "Morning (10 AM - 12 PM)"},
+                    {"id": "TIME_AFTERNOON", "title": "Afternoon (12 PM - 4 PM)"},
+                    {"id": "TIME_EVENING",   "title": "Evening (4 PM - 7 PM)"}
+                ]}]
+                send_list_message(phone, "Which time works best for you?", "Select Time", sections)
+                return
             USER_STATE[phone]["preferred_time"] = time_map[text]
             
             # Check if this is a Home Visit appointment
@@ -1685,6 +1701,16 @@ def sales_flow_handler(phone, text):
             elif any(k in t for k in ["evening", "4 pm", "5 pm", "6 pm", "4pm", "5pm", "6pm", "after 4", "late"]):
                 resolved_time = "TIME_EVENING"
             if resolved_time:
+                from utils import is_booking_date_today, is_slot_available_today
+                if is_booking_date_today(phone) and not is_slot_available_today(resolved_time, time_map[resolved_time]):
+                    send_whatsapp_message(phone, "⚠️ That time slot has already passed for today. Please choose an available slot:")
+                    sections = [{"title": "Select Time Slot", "rows": [
+                        {"id": "TIME_MORNING",   "title": "Morning (10 AM - 12 PM)"},
+                        {"id": "TIME_AFTERNOON", "title": "Afternoon (12 PM - 4 PM)"},
+                        {"id": "TIME_EVENING",   "title": "Evening (4 PM - 7 PM)"}
+                    ]}]
+                    send_list_message(phone, "Which time works best for you?", "Select Time", sections)
+                    return
                 USER_STATE[phone]["preferred_time"] = time_map[resolved_time]
                 if USER_STATE[phone].get("appointment_type") == "Home Visit":
                     USER_STATE[phone]["state"] = "SALES_COLLECT_ADDRESS"
@@ -1707,31 +1733,41 @@ def sales_flow_handler(phone, text):
     # COLLECT ADDRESS (ONLY for Home Visit)
     # ==========================================
     elif state == "SALES_COLLECT_ADDRESS":
-        USER_STATE[phone]["customer_address"] = text
-        USER_STATE[phone]["state"] = "SALES_COLLECT_NAME"
-        
-        send_whatsapp_message(
-            phone,
-            "Thank you! 📍\n\nNow, please provide your *full name*:"
-        )
+        from utils import validate_and_clean_location
+        is_valid, clean_loc, fallback_msg = validate_and_clean_location(text)
+        if is_valid:
+            USER_STATE[phone]["customer_address"] = clean_loc
+            USER_STATE[phone]["state"] = "SALES_COLLECT_NAME"
+            
+            send_whatsapp_message(
+                phone,
+                "Thank you! 📍\n\nNow, please provide your *full name*:"
+            )
+        else:
+            send_whatsapp_message(phone, fallback_msg)
         return
     
     # ==========================================
     # COLLECT NAME
     # ==========================================
     elif state == "SALES_COLLECT_NAME":
-        USER_STATE[phone]["customer_name"] = text.strip()
-        USER_STATE[phone]["state"] = "SALES_COLLECT_LICENSE"
+        from utils import validate_and_clean_name
+        is_valid, clean_name, fallback_msg = validate_and_clean_name(text)
+        if is_valid:
+            USER_STATE[phone]["customer_name"] = clean_name
+            USER_STATE[phone]["state"] = "SALES_COLLECT_LICENSE"
 
-        buttons = [
-            {"type": "reply", "reply": {"id": "LICENSE_YES", "title": "✅ Yes"}},
-            {"type": "reply", "reply": {"id": "LICENSE_NO",  "title": "❌ No"}}
-        ]
-        send_button_message(
-            phone,
-            "Do you have a valid driving license?",
-            buttons
-        )
+            buttons = [
+                {"type": "reply", "reply": {"id": "LICENSE_YES", "title": "✅ Yes"}},
+                {"type": "reply", "reply": {"id": "LICENSE_NO",  "title": "❌ No"}}
+            ]
+            send_button_message(
+                phone,
+                "Do you have a valid driving license?",
+                buttons
+            )
+        else:
+            send_whatsapp_message(phone, fallback_msg)
         return
 
     # ==========================================

@@ -46,6 +46,36 @@ def delete_session(token: str):
 from utils import format_mobile, generate_upload_token, get_user_from_token, revoke_upload_token
 
 app = FastAPI()
+
+@app.get("/db_image/{file_id}")
+async def get_db_image(file_id: str):
+    from pymongo import MongoClient
+    from bson.objectid import ObjectId
+    import gridfs
+    from config import MONGO_URI
+    from fastapi.responses import StreamingResponse
+    import io
+
+    try:
+        client = MongoClient(MONGO_URI)
+        db = client["whatsapp_bot"]
+        fs = gridfs.GridFS(db)
+        
+        grid_out = fs.get(ObjectId(file_id))
+        
+        # Determine mime type based on filename if possible, otherwise fallback to jpeg
+        mime_type = "image/jpeg"
+        if grid_out.filename:
+            if grid_out.filename.lower().endswith('.png'): mime_type = "image/png"
+            elif grid_out.filename.lower().endswith('.webp'): mime_type = "image/webp"
+            elif grid_out.filename.lower().endswith('.pdf'): mime_type = "application/pdf"
+            
+        return StreamingResponse(io.BytesIO(grid_out.read()), media_type=mime_type)
+    except Exception as e:
+        print(f"Error serving GridFS image {file_id}: {e}")
+        from fastapi import Response
+        return Response(status_code=404)
+
 app.include_router(service_router)
 
 

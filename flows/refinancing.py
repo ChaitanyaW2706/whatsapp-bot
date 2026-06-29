@@ -306,24 +306,30 @@ def refinancing_flow_handler(phone: str, text: str):
 
     # ── Q2a: Collect name (only if not pre-filled) ───────────────────
     if state == "REFINANCING_ASK_NAME":
-        if not text or len(text.strip()) < 2:
-            send_whatsapp_message(phone, "⚠️ Please enter a valid name.")
-            return
-        data["name"] = text.strip().title()
-        USER_STATE[phone]["state"] = "REFINANCING_ASK_CITY"
-        send_whatsapp_message(
-            phone,
-            f"Thanks, *{data['name']}*! 😊\n\n"
-            "📍 Which city are you located in?"
-        )
+        from utils import validate_and_clean_name
+        is_valid, clean_name, fallback_msg = validate_and_clean_name(text)
+        if is_valid:
+            data["name"] = clean_name
+            USER_STATE[phone]["state"] = "REFINANCING_ASK_CITY"
+            send_whatsapp_message(
+                phone,
+                f"Thanks, *{clean_name}*! 😊\n\n"
+                "📍 Which city are you located in?"
+            )
+        else:
+            send_whatsapp_message(phone, fallback_msg)
         return
 
     # ── Q2b / Q3: Collect city ───────────────────────────────────────
     if state == "REFINANCING_ASK_CITY":
-        if not text or len(text.strip()) < 2:
-            send_whatsapp_message(phone, "⚠️ Please enter a valid city name.")
+        from utils import validate_and_clean_location
+        is_valid, clean_location, error_msg = validate_and_clean_location(text)
+        
+        if not is_valid:
+            send_whatsapp_message(phone, error_msg)
             return
-        data["city"] = text.strip().title()
+            
+        data["city"] = clean_location
         USER_STATE[phone]["state"] = "REFINANCING_ASK_BRAND"
         _send_car_brand_buttons(phone)
         return
@@ -490,8 +496,34 @@ def refinancing_flow_handler(phone: str, text: str):
             "REFI_CONTACT_TODAY":   "Today",
             "REFI_CONTACT_TOMORROW":"Tomorrow",
         }
+        
+        # Resolve selected contact preference (ID or free text)
+        selected_id = None
         if text in pref_map:
-            data["contact_preference"] = pref_map[text]
+            selected_id = text
+        else:
+            t = text.lower().strip()
+            if any(k in t for k in ["30 min", "30min", "soon", "immediately", "quick"]):
+                selected_id = "REFI_CONTACT_30MIN"
+            elif "today" in t:
+                selected_id = "REFI_CONTACT_TODAY"
+            elif "tomorrow" in t:
+                selected_id = "REFI_CONTACT_TOMORROW"
+
+        if selected_id:
+            # Check 5:00 PM cutoff for same-day contact options
+            now = datetime.now()
+            current_time_float = now.hour + now.minute / 60.0
+            if current_time_float >= 17.0 and selected_id in ("REFI_CONTACT_30MIN", "REFI_CONTACT_TODAY"):
+                send_whatsapp_message(
+                    phone,
+                    "⚠️ Our finance team is available from 9:00 AM to 5:00 PM. "
+                    "Since it is past 5:00 PM, please choose Tomorrow for us to contact you:"
+                )
+                _send_contact_preference(phone)
+                return
+
+            data["contact_preference"] = pref_map[selected_id]
             # ── Save lead to DB ───────────────────────────────────────
             lead_id = save_refinancing_lead(data)
             # ── Reset flow state ──────────────────────────────────────
@@ -675,13 +707,23 @@ def _send_loan_requirement_buttons(phone: str):
 
 
 def _send_contact_preference(phone: str):
-    send_button_message(
-        phone,
-        "📅 *Lead Conversion*\n\n"
-        "When would you like our finance advisor to contact you?",
-        [
+    now = datetime.now()
+    current_time_float = now.hour + now.minute / 60.0
+    
+    if current_time_float >= 17.0:  # After 5:00 PM
+        buttons = [
+            {"type": "reply", "reply": {"id": "REFI_CONTACT_TOMORROW", "title": "🗓 Tomorrow"}},
+        ]
+    else:
+        buttons = [
             {"type": "reply", "reply": {"id": "REFI_CONTACT_30MIN",    "title": "⚡ Within 30 mins"}},
             {"type": "reply", "reply": {"id": "REFI_CONTACT_TODAY",    "title": "📅 Today"}},
             {"type": "reply", "reply": {"id": "REFI_CONTACT_TOMORROW", "title": "🗓 Tomorrow"}},
         ]
+        
+    send_button_message(
+        phone,
+        "📅 *Lead Conversion*\n\n"
+        "When would you like our finance advisor to contact you?",
+        buttons
     )

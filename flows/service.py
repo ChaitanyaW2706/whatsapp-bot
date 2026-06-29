@@ -977,9 +977,12 @@ class WhatsAppBot:
         
         # Enhanced pattern matching for ALL Indian formats
         
-        # 1. Standard format: KA01AB1234, MH04DA2121, UP32XY0786
-        if re.match(r'^[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{1,6}$', s):
+        from utils import is_valid_vehicle_reg
+        is_valid, _ = is_valid_vehicle_reg(s)
+        if is_valid:
             return True
+            
+        # 2. Diplomatic format: 77CD1, 11CC432
         
         # 2. Diplomatic format: 77CD1, 11CC432
         if re.match(r'^\d{1,3}[A-Z]{2}\d{1,6}$', s):
@@ -1003,14 +1006,6 @@ class WhatsAppBot:
         
         # 7. Electric vehicle: DL3CAF1234
         if re.match(r'^[A-Z]{2}\d{1,2}[A-Z]{2,3}\d{1,6}$', s):
-            return True
-        
-        # 8. Flexible fallback for any reasonable combination
-        # At least 2 letters, 2 digits, reasonable length
-        letter_count = sum(1 for c in s if c.isalpha())
-        digit_count = sum(1 for c in s if c.isdigit())
-        
-        if letter_count >= 2 and digit_count >= 2 and 4 <= len(s) <= 12:
             return True
         
         return False
@@ -1271,8 +1266,12 @@ class WhatsAppBot:
             elif is_genuine_query(original_message, session['state']):
                 return self._service_route_via_ai(phone_number, original_message, session['state'])
             else:
-                msg = ("Please enter your Vehicle Registration Number to continue.\n\n"
-                       "Examples: KA01AB1234, MH 01 AB 1234, DL 1T 2468")
+                msg = ("⚠️ The registration number you entered does not match standard Indian formats.\n\n"
+                       "Please provide a valid registration number to continue.\n\n"
+                       "Examples:\n"
+                       "• Standard: *KA01AB1234* or *MH 01 AB 1234*\n"
+                       "• Bharat Series: *22BH1234AA*\n"
+                       "• Commercial: *DL 1T 2468*")
                 self.send_message(phone_number, msg)
                 return msg
 
@@ -1312,10 +1311,10 @@ class WhatsAppBot:
             return self.book_service_appointment(phone_number)
 
         if message == 'contact_advisor':
-            return self.trigger_human_agent_confirmation(phone_number)
+            return self.contact_service_advisor(phone_number)
 
         # Button from the estimate no-pricing prompt -> open contact advisor menu
-        if message == 'estimate_contact_advisor':
+        if message == 'srv_contact_advisor':
             return self.contact_service_advisor(phone_number)
 
         if message == 'service_estimate':
@@ -1478,7 +1477,7 @@ class WhatsAppBot:
 
         # New state: no-pricing prompt with Contact Advisor / Back to Main buttons
         if session['state'] == 'estimate_contact_advisor_prompt':
-            if message == 'estimate_contact_advisor':
+            if message == 'srv_contact_advisor':
                 return self.contact_service_advisor(phone_number)
             elif message == 'back_to_main':
                 return self.handle_back_to_main(phone_number)
@@ -1495,7 +1494,7 @@ class WhatsAppBot:
             return self.handle_estimate_image_upload_confirmation(phone_number, message)
 
         if session['state'] == 'estimate_image_upload_waiting':
-            if message == 'estimate_image_confirm':
+            if message == 'srv_image_confirm':
                 return self.handle_estimate_image_confirm(phone_number)
             elif message in ['image_uploaded', 'document_uploaded']:
                 current_count = session.get('uploaded_image_count', 0) + 1
@@ -1504,7 +1503,7 @@ class WhatsAppBot:
                 
                 confirm_msg = (f"✅ Images received!\n📸 Total: {current_count}\n"
                               f"Click Confirm to submit")
-                buttons = [{"type": "reply", "reply": {"id": "estimate_image_confirm", 
+                buttons = [{"type": "reply", "reply": {"id": "srv_image_confirm", 
                                                         "title": "✅ Confirm"}}]
                 self.send_message(phone_number, confirm_msg, buttons=buttons)
                 return confirm_msg
@@ -1514,7 +1513,7 @@ class WhatsAppBot:
                 return reminder
 
         if session['state'] == 'estimate_image_confirm_ready':
-            if message == 'estimate_image_confirm':
+            if message == 'srv_image_confirm':
                 return self.handle_estimate_image_confirm(phone_number)
             elif message in ['image_uploaded', 'document_uploaded']:
                 current_count = session.get('uploaded_image_count', 0) + 1
@@ -1522,14 +1521,14 @@ class WhatsAppBot:
                 
                 more_msg = (f"✅ Image #{current_count} received!\n"
                            f"Total: {current_count}\nClick Confirm when ready")
-                buttons = [{"type": "reply", "reply": {"id": "estimate_image_confirm", 
+                buttons = [{"type": "reply", "reply": {"id": "srv_image_confirm", 
                                                         "title": "✅ Confirm"}}]
                 self.send_message(phone_number, more_msg, buttons=buttons)
                 return more_msg
             else:
                 reminder = (f"📸 Your images are ready. Total: {session.get('uploaded_image_count', 0)}\n"
                            f"Click Confirm to submit")
-                buttons = [{"type": "reply", "reply": {"id": "estimate_image_confirm", 
+                buttons = [{"type": "reply", "reply": {"id": "srv_image_confirm", 
                                                         "title": "✅ Confirm"}}]
                 self.send_message(phone_number, reminder, buttons=buttons)
                 return reminder
@@ -1603,9 +1602,12 @@ class WhatsAppBot:
         reg_number = extracted or self.normalize_reg(reg_input)
         
         if not self.validate_reg_candidate(reg_number):
-            msg = ("❗ Invalid registration format.\n\n"
-                   "Supported: KA01AB1234, MH 01 AB 1234, DL 1T 2468\n"
-                   "Please try again:")
+            msg = ("⚠️ The registration number you entered does not match standard Indian formats.\n\n"
+                   "Please provide a valid registration number to continue.\n\n"
+                   "Examples:\n"
+                   "• Standard: *KA01AB1234* or *MH 01 AB 1234*\n"
+                   "• Bharat Series: *22BH1234AA*\n"
+                   "• Commercial: *DL 1T 2468*")
             self.send_message(phone_number, msg)
             return msg
         
@@ -2077,6 +2079,27 @@ class WhatsAppBot:
     def handle_callback_slots(self, phone_number, slot):
         contact_data = self.user_sessions[phone_number]['contact_data']
         
+        slot_map = {
+            'callback_morning': 'Morning (9AM - 12PM)',
+            'callback_afternoon': 'Afternoon (1PM - 3PM)',
+            'callback_evening': 'Evening (4PM - 6PM)'
+        }
+        if slot in slot_map:
+            from utils import is_booking_date_today, is_slot_available_today
+            if is_booking_date_today(phone_number) and not is_slot_available_today(slot, slot_map[slot]):
+                msg = "⚠️ That time slot has already passed for today. Please choose an available slot:"
+                self.user_sessions[phone_number]['state'] = 'callback_slots'
+                list_sections = [{
+                    "title": "Available Time Slots",
+                    "rows": [
+                        {"id": "callback_morning", "title": "Morning (9AM - 12PM)", "description": "Morning callback slot"},
+                        {"id": "callback_afternoon", "title": "Afternoon (1PM - 3PM)", "description": "Afternoon callback slot"},
+                        {"id": "callback_evening", "title": "Evening (4PM - 6PM)", "description": "Evening callback slot"}
+                    ]
+                }]
+                self.send_message(phone_number, msg, list_message=list_sections, include_end_button=True)
+                return msg
+
         # Store slot selection
         if slot == 'callback_morning':
             contact_data['callback_timing'] = 'Morning (9AM - 12PM)'
@@ -2218,6 +2241,27 @@ class WhatsAppBot:
     def handle_video_call_slots(self, phone_number, slot):
         contact_data = self.user_sessions[phone_number]['contact_data']
         
+        slot_map = {
+            'video_morning': 'Morning (9AM - 12PM)',
+            'video_afternoon': 'Afternoon (1PM - 3PM)',
+            'video_evening': 'Evening (4PM - 6PM)'
+        }
+        if slot in slot_map:
+            from utils import is_booking_date_today, is_slot_available_today
+            if is_booking_date_today(phone_number) and not is_slot_available_today(slot, slot_map[slot]):
+                msg = "⚠️ That time slot has already passed for today. Please choose an available slot:"
+                self.user_sessions[phone_number]['state'] = 'video_call_slots'
+                list_sections = [{
+                    "title": "Available Time Slots",
+                    "rows": [
+                        {"id": "video_morning", "title": "Morning (9AM - 12PM)", "description": "Morning video call slot"},
+                        {"id": "video_afternoon", "title": "Afternoon (1PM - 3PM)", "description": "Afternoon video call slot"},
+                        {"id": "video_evening", "title": "Evening (4PM - 6PM)", "description": "Evening video call slot"}
+                    ]
+                }]
+                self.send_message(phone_number, msg, list_message=list_sections, include_end_button=True)
+                return msg
+
         # Store slot selection
         if slot == 'video_morning':
             contact_data['video_timing'] = 'Morning (9AM - 12PM)'
@@ -2331,7 +2375,11 @@ class WhatsAppBot:
         
            
         self.send_message(phone_number, message)
-         # ADD THESE LINES - Send action buttons after service history
+        
+        import time
+        time.sleep(1.5)
+        
+        # ADD THESE LINES - Send action buttons after service history
         self.send_service_history_options(phone_number)
         #    # ADD BACK/END BUTTONS AFTER CONFIRMATION
         # self.send_back_end_buttons(phone_number)
@@ -2368,10 +2416,10 @@ class WhatsAppBot:
             list_sections = [{
                 "title": "Service Types",
                 "rows": [
-                    {"id": "estimate_accidental", "title": "🚗 Accidental/Bodywork", "description": "Collision repair, dent removal, painting"},
-                    {"id": "estimate_running_repair", "title": "🔧 Running Repair", "description": "Engine, transmission, general repairs"},
-                    {"id": "estimate_tire_wheel", "title": "🛞 Tire & Wheel Service", "description": "Tire replacement, wheel alignment, balancing"},
-                    {"id": "estimate_battery_electrical", "title": "⚡ Battery & Electrical", "description": "Battery, alternator, electrical issues"}
+                    {"id": "srv_accidental", "title": "🚗 Accidental/Bodywork", "description": "Collision repair, dent removal, painting"},
+                    {"id": "srv_running_repair", "title": "🔧 Running Repair", "description": "Engine, transmission, general repairs"},
+                    {"id": "srv_tire_wheel", "title": "🛞 Tire & Wheel Service", "description": "Tire replacement, wheel alignment, balancing"},
+                    {"id": "srv_battery_electrical", "title": "⚡ Battery & Electrical", "description": "Battery, alternator, electrical issues"}
                 ]
             }]
             
@@ -2397,8 +2445,8 @@ class WhatsAppBot:
         )
 
         buttons = [
-            {"type": "reply", "reply": {"id": "estimate_same_yes", "title": "✅ Yes"}},
-            {"type": "reply", "reply": {"id": "estimate_same_no", "title": "❌ Different Service"}}
+            {"type": "reply", "reply": {"id": "srv_same_yes", "title": "✅ Yes"}},
+            {"type": "reply", "reply": {"id": "srv_same_no", "title": "❌ Different Service"}}
         ]
         
         self.send_message(phone_number, message, buttons=buttons)
@@ -2444,11 +2492,11 @@ class WhatsAppBot:
         """Handle yes/no response for same service type estimate"""
         session = self.user_sessions[phone_number]
         
-        if response == 'estimate_same_yes':
+        if response == 'srv_same_yes':
             # User wants estimate for same service type - get estimate data
             return self.show_service_estimate_details(phone_number)
         
-        elif response == 'estimate_same_no':
+        elif response == 'srv_same_no':
             # User wants different service type
             return self.show_service_type_selection(phone_number)
         
@@ -2508,7 +2556,7 @@ class WhatsAppBot:
             )
 
             buttons = [
-                {"type": "reply", "reply": {"id": "estimate_contact_advisor", "title": "📞 Contact Advisor"}},
+                {"type": "reply", "reply": {"id": "srv_contact_advisor", "title": "📞 Contact Advisor"}},
                 {"type": "reply", "reply": {"id": "back_to_main",            "title": "🔙 Back to Main Menu"}}
             ]
 
@@ -2517,7 +2565,7 @@ class WhatsAppBot:
 
     def handle_estimate_2hr_confirmation(self, phone_number, response):
         """Handle 2-hour advisor confirmation response"""
-        if response == 'estimate_2hr_yes':
+        if response == 'srv_2hr_yes':
             self.user_sessions[phone_number]['state'] = 'initial'
             message = (
                 "Great! ✅ I've notified our service team.\n\n"
@@ -2543,10 +2591,10 @@ class WhatsAppBot:
         list_sections = [{
             "title": "Service Types", 
             "rows": [
-                {"id": "estimate_accidental", "title": "🚗 Accidental/Bodywork", "description": "Collision repair, dent removal, painting"},
-                {"id": "estimate_running_repair", "title": "🔧 Running Repair", "description": "Engine, transmission, general repairs"},
-                {"id": "estimate_tire_wheel", "title": "🛞 Tire & Wheel Service", "description": "Tire replacement, wheel alignment, balancing"},
-                {"id": "estimate_battery_electrical", "title": "⚡ Battery & Electrical", "description": "Battery, alternator, electrical issues"}
+                {"id": "srv_accidental", "title": "🚗 Accidental/Bodywork", "description": "Collision repair, dent removal, painting"},
+                {"id": "srv_running_repair", "title": "🔧 Running Repair", "description": "Engine, transmission, general repairs"},
+                {"id": "srv_tire_wheel", "title": "🛞 Tire & Wheel Service", "description": "Tire replacement, wheel alignment, balancing"},
+                {"id": "srv_battery_electrical", "title": "⚡ Battery & Electrical", "description": "Battery, alternator, electrical issues"}
             ]
         }]
         
@@ -2559,10 +2607,10 @@ class WhatsAppBot:
         
         # Store selected service type
         service_type_map = {
-            'estimate_accidental': 'Accidental/Bodywork',
-            'estimate_running_repair': 'Running Repair', 
-            'estimate_tire_wheel': 'Tire & Wheel Service',
-            'estimate_battery_electrical': 'Battery & Electrical'
+            'srv_accidental': 'Accidental/Bodywork',
+            'srv_running_repair': 'Running Repair', 
+            'srv_tire_wheel': 'Tire & Wheel Service',
+            'srv_battery_electrical': 'Battery & Electrical'
         }
         
         selected_service = service_type_map.get(service_type, 'Unknown Service')
@@ -2578,8 +2626,8 @@ class WhatsAppBot:
         )
         
         buttons = [
-            {"type": "reply", "reply": {"id": "estimate_image_yes", "title": "✅ Yes, Upload Images"}},
-            {"type": "reply", "reply": {"id": "estimate_image_no", "title": "❌ No, Thanks"}}
+            {"type": "reply", "reply": {"id": "srv_image_yes", "title": "✅ Yes, Upload Images"}},
+            {"type": "reply", "reply": {"id": "srv_image_no", "title": "❌ No, Thanks"}}
         ]
         
         self.send_message(phone_number, message, buttons=buttons)
@@ -2591,7 +2639,7 @@ class WhatsAppBot:
         session = self.user_sessions[phone_number]
         selected_service = session.get('selected_estimate_service', 'Service')
 
-        if response == 'estimate_image_yes':
+        if response == 'srv_image_yes':
             vehicle_reg = session.get('vehicle_reg', 'N/A')
 
             # Read Cloudflare BASE_URL from .env
@@ -2622,7 +2670,7 @@ class WhatsAppBot:
             self.send_message(phone_number, message)
             return message
 
-        elif response == 'estimate_image_no':
+        elif response == 'srv_image_no':
             return self.finalize_estimate_request(phone_number, image_uploaded=False)
 
         else:
@@ -2648,7 +2696,7 @@ class WhatsAppBot:
                     f"Click **Confirm** below to submit your estimate request."
                 )
                 
-                buttons = [{"type": "reply", "reply": {"id": "estimate_image_confirm", "title": "✅ Confirm & Submit"}}]
+                buttons = [{"type": "reply", "reply": {"id": "srv_image_confirm", "title": "✅ Confirm & Submit"}}]
                 self.send_message(phone_number, confirmation_message, buttons=buttons)
         
         # Start delayed response in background
@@ -2993,6 +3041,19 @@ class WhatsAppBot:
     def handle_booking_slots(self, phone_number, slot):
         booking_data = self.user_sessions[phone_number]['booking_data']
         
+        slot_map = {
+            'slot_morning': 'Morning (9AM - 12PM)',
+            'slot_afternoon': 'Afternoon (1PM - 3PM)',
+            'slot_evening': 'Evening (4PM - 6PM)'
+        }
+        if slot in slot_map:
+            from utils import is_booking_date_today, is_slot_available_today
+            if is_booking_date_today(phone_number) and not is_slot_available_today(slot, slot_map[slot]):
+                msg = "⚠️ That time slot has already passed for today. Please choose an available slot:"
+                self.send_message(phone_number, msg)
+                self.show_time_slots(phone_number)
+                return msg
+        
         if slot == 'slot_morning':
             booking_data['timing'] = 'Morning (9AM - 12PM)'
         elif slot == 'slot_afternoon':
@@ -3007,8 +3068,14 @@ class WhatsAppBot:
         return message
 
     def handle_full_name_input(self, phone_number, full_name):
+        from utils import validate_and_clean_name
+        is_valid, clean_name, fallback_msg = validate_and_clean_name(full_name)
+        if not is_valid:
+            self.send_message(phone_number, fallback_msg)
+            return fallback_msg
+
         booking_data = self.user_sessions[phone_number]['booking_data']
-        booking_data['full_name'] = full_name
+        booking_data['full_name'] = clean_name
 
         # Auto-capture the customer's WhatsApp number - no need to ask.
         # phone_number is the WhatsApp sender ID (e.g. 919876543210).
@@ -3099,19 +3166,25 @@ class WhatsAppBot:
         return message
     
     def handle_pickup_address_input(self, phone_number, pickup_address):
+        from utils import validate_and_clean_location
+        is_valid, clean_location, error_msg = validate_and_clean_location(pickup_address)
+        
+        if not is_valid:
+            return self.send_message(phone_number, error_msg)
+            
         booking_data = self.user_sessions[phone_number]['booking_data']
-        booking_data['pickup_address'] = pickup_address
+        booking_data['pickup_address'] = clean_location
         
         if booking_data['service_preference'] == 'Pickup Only':
             # For Pickup Only, go to special instructions
             self.user_sessions[phone_number]['state'] = 'waiting_special_instructions'
-            message = f"Pickup Address saved: {pickup_address} 🏠\n\n📝 Any Special Instructions? (Type your instructions or 'none' if no special requests):"
+            message = f"Pickup Address saved: {clean_location} 🏠\n\n📝 Any Special Instructions? (Type your instructions or 'none' if no special requests):"
             self.send_message(phone_number, message)
             
         elif booking_data['service_preference'] == 'Pickup and Drop':
             # For Pickup and Drop, ask for drop address options
             self.user_sessions[phone_number]['state'] = 'waiting_drop_address_selection'
-            message = f"Pickup Address saved: {pickup_address} 🏠\n\nNow for Drop Address, please choose:"
+            message = f"Pickup Address saved: {clean_location} 🏠\n\nNow for Drop Address, please choose:"
             
             list_sections = [{
                 "title": "Drop Address Options",
@@ -3152,11 +3225,17 @@ class WhatsAppBot:
         return message
 
     def handle_drop_address_input(self, phone_number, drop_address):
+        from utils import validate_and_clean_location
+        is_valid, clean_location, error_msg = validate_and_clean_location(drop_address)
+        
+        if not is_valid:
+            return self.send_message(phone_number, error_msg)
+            
         booking_data = self.user_sessions[phone_number]['booking_data']
-        booking_data['drop_address'] = drop_address
+        booking_data['drop_address'] = clean_location
         
         self.user_sessions[phone_number]['state'] = 'waiting_special_instructions'
-        message = f"Drop Address saved: {drop_address} 🏠\n\n📝 Any Special Instructions? (Type your instructions or 'none' if no special requests):"
+        message = f"Drop Address saved: {clean_location} 🏠\n\n📝 Any Special Instructions? (Type your instructions or 'none' if no special requests):"
         self.send_message(phone_number, message)
         return message
     
@@ -3485,8 +3564,14 @@ class WhatsAppBot:
 
     def handle_city_input(self, phone_number, city):
         """Handle city input"""
+        from utils import validate_and_clean_location
+        is_valid, clean_location, error_msg = validate_and_clean_location(city)
+        
+        if not is_valid:
+            return self.send_message(phone_number, error_msg)
+            
         session = self.user_sessions[phone_number]
-        session['vehicle_info']['city'] = city.strip()
+        session['vehicle_info']['city'] = clean_location
         session['state'] = 'waiting_vehicle_model_input'
         
         message = f"🚗 **VEHICLE MODEL**\n\nThank you! Now please tell me your vehicle model.\n\n*Example: Maruti Swift, Honda City, Hyundai Creta*"
@@ -6569,9 +6654,13 @@ def handle_service(phone_number):
     logger.info(f"🔧 handle_service called for {phone_number}")
 
     if phone_number not in bot.user_sessions:
-        bot.user_sessions[phone_number] = {}
+        bot.user_sessions[phone_number] = {
+            'state': 'initial',
+            'vehicle_reg': None,
+            'vehicle_data': None
+        }
 
-    bot.user_sessions[phone_number]["state"] = "SERVICE_START"
+    bot.user_sessions[phone_number]["state"] = "waiting_for_registration"
 
     message = (
         "Hello! 👋 Welcome to Sherpa Service Center. I'm your virtual service assistant, "
