@@ -3,7 +3,8 @@ import time
 import traceback
 import json
 import os
-from config import ACCESS_TOKEN, PHONE_NUMBER_ID, USER_STATE, DB_CONFIG
+from urllib.parse import urlparse
+from config import ACCESS_TOKEN, PHONE_NUMBER_ID, BASE_URL, USER_STATE, DB_CONFIG
 from templates.messages import welcome_message, invalid_entry_message
 from flows.used_cars import used_cars_flow_handler
 from chat_history import start_chat_session, add_message, close_chat_session
@@ -254,6 +255,7 @@ def _resolve_free_text_as_button(phone: str, text: str, state: str) -> str | Non
             "EXCH_YEAR",
             "EXCH_ENTER",
             "EXCH_COLLECT",
+            "EXCH_NEW_",
             "EXCH_TD_ADDRESS",
             "EXCH_TD_LOCATION",     # address free-text
             "EXCH_COLLECT_CITY",    # city name free-text
@@ -324,6 +326,7 @@ def _resolve_free_text_as_button(phone: str, text: str, state: str) -> str | Non
             "REFINANCING_ASK_PHONE",
             "REFINANCING_ASK_CITY",
             "REFINANCING_ASK_BRAND_OTHER",
+            "REFINANCING_ASK_MODEL_OTHER",
             "REFINANCING_ASK_MODEL",
             "REFINANCING_ASK_YEAR",
             "REFINANCING_ASK_HAS_LOAN",
@@ -335,6 +338,7 @@ def _resolve_free_text_as_button(phone: str, text: str, state: str) -> str | Non
             "INSURANCE_ESTIMATE_NAME",
             "INSURANCE_ESTIMATE_LINK_SENT",
             "INSURANCE_START",      # initial insurance state (before lookup)
+            "STATE_4_RENEW_TYPE_OTHER", # custom renewal text input
             "STATE_4_NAME",
             "STATE_4_ADDRESS",
             "STATE_4_SLOT",         # time-slot selection — structured pick
@@ -570,10 +574,91 @@ def send_whatsapp_message(to, text):
         print(f"Text message failed: {response.text}")
 
 
+def upload_media_to_whatsapp(media_url, filename="media", mime_type="image/jpeg"):
+    """
+    Downloads media from a URL and uploads it directly to WhatsApp via the Media API.
+    Returns the media_id on success, or None on failure.
+    """
+    from urllib.parse import urlparse
+    import requests, os, tempfile
+    
+    media_id = None
+    temp_path = None
+    file_to_upload = None
+    try:
+        from config import BASE_URL
+        if BASE_URL and media_url.startswith(BASE_URL):
+            local_rel_path = media_url[len(BASE_URL):].lstrip("/")
+            if os.path.exists(local_rel_path):
+                file_to_upload = local_rel_path
+        
+        # If it's a db_image, read directly from GridFS to avoid HTTP deadlocks
+        if not file_to_upload and "/db_image/" in media_url:
+            file_id = media_url.split("/db_image/")[1].split("/")[0]
+            try:
+                from pymongo import MongoClient
+                from bson.objectid import ObjectId
+                import gridfs
+                from config import MONGO_URI
+                with MongoClient(MONGO_URI) as client:
+                    db = client["whatsapp_bot"]
+                    fs = gridfs.GridFS(db)
+                    grid_out = fs.get(ObjectId(file_id))
+                    temp_dir = tempfile.gettempdir()
+                    temp_path = os.path.join(temp_dir, filename)
+                    with open(temp_path, "wb") as f:
+                        f.write(grid_out.read())
+                    file_to_upload = temp_path
+            except Exception as e:
+                print(f"❌ Failed to extract GridFS image for direct upload: {e}")
+
+        if not file_to_upload:
+            temp_dir = tempfile.gettempdir()
+            temp_path = os.path.join(temp_dir, filename)
+            
+            dl_resp = requests.get(media_url, timeout=10)
+            if dl_resp.status_code == 200:
+                with open(temp_path, "wb") as f:
+                    f.write(dl_resp.content)
+                file_to_upload = temp_path
+                
+        if file_to_upload:
+            upload_url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/media"
+            upload_headers = {
+                "Authorization": f"Bearer {ACCESS_TOKEN}"
+            }
+            with open(file_to_upload, "rb") as f:
+                files = {
+                    "file": (filename, f, mime_type)
+                }
+                data = {
+                    "messaging_product": "whatsapp"
+                }
+                up_resp = requests.post(upload_url, headers=upload_headers, files=files, data=data)
+                
+            if up_resp.status_code == 200:
+                media_id = up_resp.json().get("id")
+                print(f"✅ Successfully uploaded media to WhatsApp. ID: {media_id}")
+            else:
+                print(f"⚠️ Failed to upload media directly: {up_resp.text}")
+    except Exception as e:
+        print(f"⚠️ Error during direct media upload: {e}")
+    finally:
+        if temp_path:
+            try:
+                os.remove(temp_path)
+            except:
+                pass
+                
+    return media_id
+
+
+
 # ======================================
 # SEND BUTTON MESSAGE
 # ======================================
-def send_button_message(to, body, buttons):
+def send_button_message(to, body, buttons, header_image_url=None):
+    import requests
     url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
 
     headers = {
@@ -585,6 +670,12 @@ def send_button_message(to, body, buttons):
     if body and len(body) > 1024:
         body = body[:1020] + "..."
 
+    # Filter buttons dynamically for lapsed slots and Today cutoff
+    if isinstance(buttons, list):
+        from utils import filter_date_options, filter_lapsed_time_slots
+        buttons = filter_date_options(to, buttons)
+        buttons = filter_lapsed_time_slots(to, buttons)
+
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
@@ -595,6 +686,38 @@ def send_button_message(to, body, buttons):
             "action": {"buttons": buttons}
         }
     }
+    
+    if header_image_url:
+        from webhook import get_public_whatsapp_media_url, normalize_whatsapp_media_link
+        final_image_url = get_public_whatsapp_media_url(header_image_url)
+        if not final_image_url:
+            final_image_url = normalize_whatsapp_media_link(header_image_url) or header_image_url
+            
+        # Try direct upload first
+        import os
+        filename = os.path.basename(header_image_url) or "image.jpg"
+        if not filename.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+            filename += ".jpg"
+            
+        media_id = upload_media_to_whatsapp(final_image_url, filename=filename, mime_type="image/jpeg")
+        
+        payload["interactive"]["header"] = {
+            "type": "image"
+        }
+        
+        if media_id:
+            payload["interactive"]["header"]["image"] = {"id": media_id}
+        else:
+            try:
+                resp = requests.get(final_image_url, stream=True, timeout=5)
+                if resp.status_code == 200:
+                    payload["interactive"]["header"]["image"] = {"link": final_image_url}
+                else:
+                    print(f"⚠️ Image link {final_image_url} returned {resp.status_code}. Omitting header to ensure message delivery.")
+                    del payload["interactive"]["header"]
+            except Exception as e:
+                print(f"⚠️ Image link check failed for {final_image_url}: {e}. Omitting header to ensure message delivery.")
+                del payload["interactive"]["header"]
 
     response = requests.post(url, headers=headers, json=payload)
         # 🔥 Store Bot Button Message
@@ -608,8 +731,12 @@ def send_button_message(to, body, buttons):
 
     if response.status_code != 200:
         print(f"Button message failed: {response.text}")
-
-
+        if header_image_url and "interactive" in payload and "header" in payload["interactive"]:
+            print("⚠️ Retrying button message without header image...")
+            del payload["interactive"]["header"]
+            response = requests.post(url, headers=headers, json=payload)
+            if response.status_code != 200:
+                print(f"Fallback button message also failed: {response.text}")
 # ======================================
 # SEND INTERACTIVE LIST MESSAGE
 # ======================================
@@ -620,6 +747,23 @@ def send_list_message(to, body_text, button_text, sections):
         "Authorization": f"Bearer {ACCESS_TOKEN}",
         "Content-Type": "application/json"
     }
+
+    # Filter list options dynamically for lapsed slots and Today cutoff
+    if isinstance(sections, list):
+        from utils import filter_date_options, filter_lapsed_time_slots
+        filtered_sections = []
+        for sec in sections:
+            if isinstance(sec, dict) and "rows" in sec:
+                rows = sec["rows"]
+                if isinstance(rows, list):
+                    rows = filter_date_options(to, rows)
+                    rows = filter_lapsed_time_slots(to, rows)
+                new_sec = dict(sec)
+                new_sec["rows"] = rows
+                filtered_sections.append(new_sec)
+            else:
+                filtered_sections.append(sec)
+        sections = filtered_sections
 
     payload = {
         "messaging_product": "whatsapp",
@@ -659,24 +803,56 @@ def send_whatsapp_image(to, image_url, caption=""):
         "Content-Type": "application/json"
     }
 
+    final_image_url = get_public_whatsapp_media_url(image_url)
+    if not final_image_url:
+        print(f"❌ Cannot resolve image URL for WhatsApp send: {image_url}")
+        final_image_url = normalize_whatsapp_media_link(image_url) or image_url
+
+    # Try Direct Media Upload First
+    import os
+    import mimetypes
+    filename = os.path.basename(final_image_url) or "image.jpg"
+    
+    # Remove query params from filename if present
+    filename = filename.split("?")[0]
+    
+    if not filename.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+        filename += ".jpg"
+        
+    mime_type, _ = mimetypes.guess_type(filename)
+    if not mime_type:
+        mime_type = "image/jpeg"
+        
+    media_id = upload_media_to_whatsapp(final_image_url, filename=filename, mime_type=mime_type)
+
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
         "type": "image",
         "image": {
-            "link": image_url,
             "caption": caption
         }
     }
+    
+    if media_id:
+        payload["image"]["id"] = media_id
+    else:
+        payload["image"]["link"] = final_image_url
 
     response = requests.post(url, headers=headers, json=payload)
-        # 🔥 Store Bot Image Message
+    if response.status_code != 200 and not media_id and final_image_url != normalize_whatsapp_media_link(image_url):
+        print("⚠️ Primary media send failed, retrying with local hosted fallback")
+        fallback_url = download_and_host_media(image_url)
+        if fallback_url:
+            payload["image"]["link"] = fallback_url
+            response = requests.post(url, headers=headers, json=payload)
+
     session_id = USER_STATE.get(to, {}).get("session_id")
     if session_id:
         add_message(
             session_id=session_id,
             sender="bot",
-            text=f"[IMAGE] {caption if caption else image_url}"
+            text=f"[IMAGE] {caption if caption else final_image_url}"
         )
 
     print("📸 WhatsApp image response:", response.status_code, response.text)
@@ -693,19 +869,37 @@ def send_whatsapp_document(to, document_url, filename, caption=""):
         "Content-Type": "application/json"
     }
 
+    final_document_url = get_public_whatsapp_media_url(document_url, filename)
+    if not final_document_url:
+        print(f"❌ Cannot resolve document URL for WhatsApp send: {document_url}")
+        final_document_url = normalize_whatsapp_media_link(document_url) or document_url
+
+    # Try Direct Media Upload First (Bypasses Cloudflare tunnel limits)
+    media_id = upload_media_to_whatsapp(final_document_url, filename=filename, mime_type="application/pdf")
+
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
         "type": "document",
         "document": {
-            "link": document_url,
             "filename": filename,
             "caption": caption
         }
     }
+    
+    if media_id:
+        payload["document"]["id"] = media_id
+    else:
+        payload["document"]["link"] = final_document_url
 
     response = requests.post(url, headers=headers, json=payload)
-        # 🔥 Store Bot Document Message
+    if response.status_code != 200 and not media_id and final_document_url != normalize_whatsapp_media_link(document_url):
+        print("⚠️ Primary document send failed, retrying with local hosted fallback")
+        fallback_url = download_and_host_media(document_url, filename)
+        if fallback_url:
+            payload["document"]["link"] = fallback_url
+            response = requests.post(url, headers=headers, json=payload)
+
     session_id = USER_STATE.get(to, {}).get("session_id")
     if session_id:
         add_message(
@@ -716,6 +910,110 @@ def send_whatsapp_document(to, document_url, filename, caption=""):
 
     print("📄 WhatsApp document response:", response.status_code, response.text)
     return response
+
+# ======================================
+# MEDIA URL NORMALIZATION / FALLBACK
+# ======================================
+
+def normalize_whatsapp_media_link(url):
+    if not url:
+        return None
+
+    url = str(url).strip()
+    if url.startswith("//"):
+        url = "https:" + url
+
+    parsed = urlparse(url)
+    if parsed.scheme in ("http", "https"):
+        return url
+
+    if BASE_URL:
+        base = BASE_URL.rstrip("/")
+        if url.startswith("/"):
+            return base + url
+        return base + "/" + url.lstrip("./")
+
+    return url
+
+
+def is_media_accessible(url, timeout=10):
+    if not url:
+        return False
+
+    # Avoid loopback requests for our own hosted media which cause server deadlocks
+    if BASE_URL and url.startswith(BASE_URL.rstrip("/")):
+        return True
+
+    try:
+        headers = {
+            "User-Agent": "AutoSherpaMediaChecker/1.0"
+        }
+        response = requests.get(url, headers=headers, stream=True, timeout=timeout, allow_redirects=True)
+        return response.status_code == 200
+    except Exception as e:
+        print(f"❌ Media accessibility check failed for {url}: {e}")
+        return False
+
+
+def download_and_host_media(url, filename=None):
+    if not url or not BASE_URL:
+        return None
+
+    normalized = normalize_whatsapp_media_link(url)
+    parsed = urlparse(normalized)
+
+    if parsed.scheme not in ("http", "https"):
+        return normalized
+
+    # Avoid downloading our own files which causes server loopback deadlocks
+    if normalized.startswith(BASE_URL.rstrip("/")):
+        return normalized
+
+    try:
+        headers = {
+            "User-Agent": "AutoSherpaMediaDownloader/1.0"
+        }
+        response = requests.get(normalized, headers=headers, stream=True, timeout=20, allow_redirects=True)
+        if response.status_code != 200:
+            print(f"❌ Download fallback failed: {response.status_code} for {normalized}")
+            return None
+
+        os.makedirs("uploads/vehicle_images", exist_ok=True)
+        if not filename:
+            filename = os.path.basename(parsed.path) or "media"
+
+        from werkzeug.utils import secure_filename
+        safe_filename = secure_filename(filename) or "media"
+        local_filename = f"{int(time.time())}_{safe_filename}"
+        local_path = os.path.join("uploads/vehicle_images", local_filename)
+
+        with open(local_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+
+        public_url = f"{BASE_URL.rstrip('/')}/uploads/vehicle_images/{local_filename}"
+        print(f"✅ Downloaded and hosted media locally: {public_url}")
+        return public_url
+    except Exception as e:
+        print(f"❌ Error downloading and hosting media: {e}")
+        return None
+
+
+def get_public_whatsapp_media_url(url, filename=None):
+    if not url:
+        return None
+
+    normalized = normalize_whatsapp_media_link(url)
+    if normalized and is_media_accessible(normalized):
+        return normalized
+
+    fallback_url = download_and_host_media(url, filename)
+    if fallback_url and is_media_accessible(fallback_url):
+        return fallback_url
+
+    return normalized
+
 
 # ======================================
 # DOWNLOAD/RETRIEVE MEDIA URL
@@ -835,7 +1133,7 @@ def _handle_main_about_contact_flow(phone, text):
             "a smooth, honest, and enjoyable experience for every customer.\n\n"
             "\U0001f3e2 *Our Roots:*\n"
             "With over 15 years in the automotive industry, we've grown from a single dealership "
-            "to a trusted name in Bangalore for Hyundai cars \u2014 both new and certified pre-owned.\n\n"
+            "to a trusted name in Bangalore for vehicles \u2014 both new and certified pre-owned.\n\n"
             "\U0001f46a *Customer First Approach:*\n"
             "We've proudly served 10,000+ happy customers, thanks to our commitment to "
             "transparency, value, and after-sales care.\n\n"
@@ -843,7 +1141,7 @@ def _handle_main_about_contact_flow(phone, text):
             "Our passion is to help families and individuals find the right vehicle that fits "
             "their needs, lifestyle, and budget \u2014 while delivering 5-star service at every step.\n\n"
             "\U0001f331 *Our Vision:*\n"
-            "To be the most loved and recommended Hyundai dealership in South India \u2014 "
+            "To be the most loved and recommended dealership in South India \u2014 "
             "trusted for both our people and our processes."
         )
         _send_main_menu_back(phone)
@@ -910,7 +1208,7 @@ def _handle_main_about_contact_flow(phone, text):
             "At AutoSherpa, we offer everything you need \u2014 from car buying to servicing \u2014 all under one roof! \U0001f698\U0001f4bc\n\n"
             "\U0001f3af *OUR SERVICES INCLUDE:*\n\n"
             "\U0001f195 *New Car Sales*\n"
-            "\u2705 Full range of Hyundai models\n"
+            "\u2705 Full range of multi-brand models\n"
             "\u2705 Expert sales consultation\n"
             "\u2705 Test drive at your convenience\n\n"
             "\U0001f697 *Certified Pre-Owned Cars*\n"
@@ -918,7 +1216,7 @@ def _handle_main_about_contact_flow(phone, text):
             "\u2705 Transparent pricing & service history\n"
             "\u2705 Finance & exchange options\n\n"
             "\U0001f9f0 *Vehicle Servicing & Repairs*\n"
-            "\u2705 Hyundai-certified technicians\n"
+            "\u2705 Certified expert technicians\n"
             "\u2705 Genuine spare parts\n"
             "\u2705 Quick turnaround & pickup-drop facility\n\n"
             "\U0001f527 *Bodyshop & Insurance Claims*\n"
@@ -948,10 +1246,10 @@ def _handle_main_about_contact_flow(phone, text):
             "We're proud to be recognized for our commitment to excellence! \U0001f3c6\u2728\n\n"
             "Here are some milestones that make us stand out:\n\n"
             "\U0001f31f *AutoSherpa Achievements:*\n\n"
-            "\U0001f3c5 Best Customer Experience Dealer \u2013 South India (2023)\n"
+            "\U0001f3c5 Best Customer Experience Dealer – South India (2023)\n"
             "\U0001f3c5 Top Performer in Certified Pre-Owned Sales (2022)\n"
-            "\U0001f3c5 Highest Customer Satisfaction Score \u2013 Hyundai India (2021)\n"
-            "\U0001f3c5 Hyundai Elite Partner Recognition \u2013 3 Years in a Row\n\n"
+            "\U0001f3c5 Highest Customer Satisfaction Score (2021)\n"
+            "\U0001f3c5 Elite Partner Recognition – 3 Years in a Row\n\n"
             "\U0001f389 *What These Awards Mean for You:*\n"
             "\u2705 Transparent & customer-friendly processes\n"
             "\u2705 Consistent service excellence\n"
@@ -984,9 +1282,9 @@ def _handle_main_about_contact_flow(phone, text):
     if text == "MAIN_CONTACT_CALLBACK":
         USER_STATE[phone]["state"] = "MENU_CONTACT_CALLBACK_TIME"
         sections = [{"title": "Preferred Time", "rows": [
-            {"id": "MAIN_CALLBACK_MORNING",   "title": "\U0001f305 Morning (9 AM \u2013 12 PM)"},
-            {"id": "MAIN_CALLBACK_AFTERNOON", "title": "\u2600\ufe0f Afternoon (12 PM \u2013 4 PM)"},
-            {"id": "MAIN_CALLBACK_EVENING",   "title": "\U0001f306 Evening (4 PM \u2013 8 PM)"}
+            {"id": "MAIN_CALLBACK_MORNING",   "title": "🌅 Morning (9AM-12PM)"},
+            {"id": "MAIN_CALLBACK_AFTERNOON", "title": "☀️ Afternoon (12-4PM)"},
+            {"id": "MAIN_CALLBACK_EVENING",   "title": "🌇 Evening (4PM-8PM)"}
         ]}]
         send_list_message(phone, "Sure! When would you prefer us to call you back?", "Select Time", sections)
         return
@@ -1003,7 +1301,14 @@ def _handle_main_about_contact_flow(phone, text):
         return
 
     if state == "MENU_CONTACT_CALLBACK_NAME":
-        USER_STATE[phone]["callback_name"] = text.strip()
+        from utils import validate_and_clean_name
+        is_valid, clean_name, fallback_msg = validate_and_clean_name(text)
+        
+        if not is_valid:
+            send_whatsapp_message(phone, fallback_msg)
+            return
+            
+        USER_STATE[phone]["callback_name"] = clean_name
         USER_STATE[phone]["state"] = "MENU_CONTACT_CALLBACK_PHONE"
         send_whatsapp_message(phone, "2. Phone Number:")
         return
@@ -1147,8 +1452,9 @@ def _reprompt_flow_state(phone: str, state: str):
                 {"id": "RENEW_3RD",       "title": "3rd Renewal"},
                 {"id": "RENEW_4TH",       "title": "4th Renewal"},
                 {"id": "RENEW_5TH",       "title": "5th Renewal"},
-                {"id": "RENEW_6TH_ABOVE", "title": "6th Renewal & Above"},
-                {"id": "RENEW_NEW",       "title": "New Policy / First Time"}
+                {"id": "RENEW_6TH_ABOVE", "title": "6th Renewal"},
+                {"id": "RENEW_NEW",       "title": "New Policy / First Time"},
+                {"id": "RENEW_OTHER",     "title": "Other (Type Manually)"}
             ]}])
         return
 
@@ -1413,6 +1719,65 @@ def handle_message(data):
         else:
             print(f"⚠️ Unknown message type '{message_type}', ignoring")
             return
+
+        # ======================
+        # SPECIAL CASE: If user just ended chat and immediately sends something
+        # ======================
+        # Check if this might be an accidental trigger
+        if not text:
+            print("⚠️ Empty text, ignoring")
+            return
+            
+        # Check if text is just whitespace or very short
+        if len(text.strip()) == 0:
+            print("⚠️ Whitespace-only message, ignoring")
+            return
+
+        # Init user if new
+        if phone not in USER_STATE:
+            USER_STATE[phone] = {"state": "START"}
+            print(f"🆕 New user initialized: {phone}")
+            # 🔥 Start Mongo Session
+            session_id = start_chat_session(phone)
+            USER_STATE[phone]["session_id"] = session_id
+
+        # 🔥 Store User Message (for ALL users — new and existing)
+        session_id = USER_STATE.get(phone, {}).get("session_id")
+        if session_id:
+            # Store raw display text: for interactive replies, store the actual label if available
+            display_text = text
+            if message_type == "interactive":
+                interactive_data = message.get("interactive", {})
+                if "button_reply" in interactive_data:
+                    display_text = interactive_data["button_reply"].get("title", text)
+                elif "list_reply" in interactive_data:
+                    display_text = interactive_data["list_reply"].get("title", text)
+            add_message(
+                session_id=session_id,
+                sender="user",
+                text=display_text
+            )
+
+        # 🔥 Store user message in MySQL conversation_log
+        try:
+            user_info2 = USER_STATE.get(phone, {})
+            vehicle_reg2 = user_info2.get("vehicle_reg") or user_info2.get("reg_number")
+            state2 = user_info2.get("state", "")
+            if state2.startswith("INSURANCE") or state2.startswith("STATE_4") or state2.startswith("STATE_5"):
+                flow2 = "insurance"
+            elif state2.startswith("SALES"):
+                flow2 = "sales"
+            elif state2.startswith("USED") or state2.startswith("EXCH"):
+                flow2 = "used_cars"
+            elif state2.startswith("SERVICE"):
+                flow2 = "service"
+            elif state2.startswith("REFINANCING"):
+                flow2 = "refinancing"
+            else:
+                flow2 = "general"
+            _log_conv(phone, display_text if session_id else text, "", flow2, vehicle_reg2)
+        except Exception as _log_e2:
+            print(f"[webhook] conv_log user error: {_log_e2}")
 
         # ──────────────────────────────────────────────────────
         # 🟢 LIVE AGENT INTERCEPTION (REFINED)
@@ -1683,7 +2048,22 @@ def handle_message(data):
                 "waiting_", "vehicle_", "booking_", "callback",
                 "video_", "contact_", "discount", "estimate_", "other_service",
             )
-            if any(current_state_for_ai.startswith(p) for p in active_flow_prefixes):
+
+            # States that explicitly ask the user for free text.
+            # Intercepting these with AI button resolution will cause failures.
+            free_text_states = {
+                "STATE_4_RENEW_TYPE_OTHER",
+                "STATE_4_NAME",
+                "STATE_4_ADDRESS",
+                "INSURANCE_LOOKUP",
+                "INSURANCE_ESTIMATE_NAME",
+                "SERVICE_VEHICLE_OTHER",
+                "SERVICE_VEHICLE_REG",
+            }
+
+            if current_state_for_ai in free_text_states:
+                _ai_resolved_action = None
+            elif any(current_state_for_ai.startswith(p) for p in active_flow_prefixes):
                 _ai_resolved_action = _resolve_free_text_as_button(phone, text, current_state_for_ai)
 
                 if _ai_resolved_action in ["GENERAL_QUERY", "SPECIFIC_CAR"]:
@@ -1699,7 +2079,7 @@ def handle_message(data):
                         _flow = "insurance"
                     elif _s.startswith("SALES"):
                         _flow = "sales"
-                    elif _s.startswith("USED"):
+                    elif _s.startswith("USED") or _s.startswith("EXCH"):
                         _flow = "used_cars"
                     elif _s.startswith("SERVICE"):
                         _flow = "service"
@@ -1768,6 +2148,7 @@ def handle_message(data):
                         # ignoring the question and forcing the flow.
                         _step_hints = {
                             "STATE_4_RENEW_TYPE": "😊 Hope that helps! Please select your *renewal type* from the list above to continue.",
+                            "STATE_4_RENEW_TYPE_OTHER": "😊 Hope that helps! Please type your *renewal type* (e.g. 7th Renewal) to continue.",
                             "STATE_4_MODE":       "😊 Hope that helps! Please select your *appointment mode* from the options above to continue.",
                             "STATE_4_DATE":       "😊 Hope that helps! Please select your *preferred date* from the options above to continue.",
                             "STATE_4_SLOT":       "😊 Hope that helps! Please select your *preferred time slot* from the options above to continue.",
@@ -1787,64 +2168,7 @@ def handle_message(data):
         
 
 
-        # ======================
-        # SPECIAL CASE: If user just ended chat and immediately sends something
-        # ======================
-        # Check if this might be an accidental trigger
-        if not text:
-            print("⚠️ Empty text, ignoring")
-            return
-            
-        # Check if text is just whitespace or very short
-        if len(text.strip()) == 0:
-            print("⚠️ Whitespace-only message, ignoring")
-            return
 
-        # Init user if new
-        if phone not in USER_STATE:
-            USER_STATE[phone] = {"state": "START"}
-            print(f"🆕 New user initialized: {phone}")
-            # 🔥 Start Mongo Session
-            session_id = start_chat_session(phone)
-            USER_STATE[phone]["session_id"] = session_id
-
-        # 🔥 Store User Message (for ALL users — new and existing)
-        session_id = USER_STATE.get(phone, {}).get("session_id")
-        if session_id:
-            # Store raw display text: for interactive replies, store the actual label if available
-            display_text = text
-            if message_type == "interactive":
-                interactive_data = message.get("interactive", {})
-                if "button_reply" in interactive_data:
-                    display_text = interactive_data["button_reply"].get("title", text)
-                elif "list_reply" in interactive_data:
-                    display_text = interactive_data["list_reply"].get("title", text)
-            add_message(
-                session_id=session_id,
-                sender="user",
-                text=display_text
-            )
-
-        # 🔥 Store user message in MySQL conversation_log
-        try:
-            user_info2 = USER_STATE.get(phone, {})
-            vehicle_reg2 = user_info2.get("vehicle_reg") or user_info2.get("reg_number")
-            state2 = user_info2.get("state", "")
-            if state2.startswith("INSURANCE") or state2.startswith("STATE_4") or state2.startswith("STATE_5"):
-                flow2 = "insurance"
-            elif state2.startswith("SALES"):
-                flow2 = "sales"
-            elif state2.startswith("USED"):
-                flow2 = "used_cars"
-            elif state2.startswith("SERVICE"):
-                flow2 = "service"
-            elif state2.startswith("REFINANCING"):
-                flow2 = "refinancing"
-            else:
-                flow2 = "general"
-            _log_conv(phone, display_text if session_id else text, "", flow2, vehicle_reg2)
-        except Exception as _log_e2:
-            print(f"[webhook] conv_log user error: {_log_e2}")
 
 
 
@@ -2179,8 +2503,9 @@ def handle_message(data):
                             {"id": "RENEW_3RD",       "title": "3rd Renewal"},
                             {"id": "RENEW_4TH",       "title": "4th Renewal"},
                             {"id": "RENEW_5TH",       "title": "5th Renewal"},
-                            {"id": "RENEW_6TH_ABOVE", "title": "6th Renewal & Above"},
-                            {"id": "RENEW_NEW",       "title": "New Policy / First Time"}
+                            {"id": "RENEW_6TH_ABOVE", "title": "6th Renewal"},
+                            {"id": "RENEW_NEW",       "title": "New Policy / First Time"},
+                            {"id": "RENEW_OTHER",     "title": "Other (Type Manually)"}
                         ]}]
                     )
 

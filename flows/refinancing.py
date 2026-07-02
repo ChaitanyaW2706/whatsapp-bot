@@ -306,24 +306,30 @@ def refinancing_flow_handler(phone: str, text: str):
 
     # ── Q2a: Collect name (only if not pre-filled) ───────────────────
     if state == "REFINANCING_ASK_NAME":
-        if not text or len(text.strip()) < 2:
-            send_whatsapp_message(phone, "⚠️ Please enter a valid name.")
-            return
-        data["name"] = text.strip().title()
-        USER_STATE[phone]["state"] = "REFINANCING_ASK_CITY"
-        send_whatsapp_message(
-            phone,
-            f"Thanks, *{data['name']}*! 😊\n\n"
-            "📍 Which city are you located in?"
-        )
+        from utils import validate_and_clean_name
+        is_valid, clean_name, fallback_msg = validate_and_clean_name(text)
+        if is_valid:
+            data["name"] = clean_name
+            USER_STATE[phone]["state"] = "REFINANCING_ASK_CITY"
+            send_whatsapp_message(
+                phone,
+                f"Thanks, *{clean_name}*! 😊\n\n"
+                "📍 Which city are you located in?"
+            )
+        else:
+            send_whatsapp_message(phone, fallback_msg)
         return
 
     # ── Q2b / Q3: Collect city ───────────────────────────────────────
     if state == "REFINANCING_ASK_CITY":
-        if not text or len(text.strip()) < 2:
-            send_whatsapp_message(phone, "⚠️ Please enter a valid city name.")
+        from utils import validate_and_clean_location
+        is_valid, clean_location, error_msg = validate_and_clean_location(text)
+        
+        if not is_valid:
+            send_whatsapp_message(phone, error_msg)
             return
-        data["city"] = text.strip().title()
+            
+        data["city"] = clean_location
         USER_STATE[phone]["state"] = "REFINANCING_ASK_BRAND"
         _send_car_brand_buttons(phone)
         return
@@ -359,38 +365,67 @@ def refinancing_flow_handler(phone: str, text: str):
 
     # ── Q4b: Other brand – manual text input ─────────────────────────
     if state == "REFINANCING_ASK_BRAND_OTHER":
-        if not text or len(text.strip()) < 2:
-            send_whatsapp_message(phone, "⚠️ Please enter a valid brand name.")
+        from utils import validate_and_clean_car_brand
+        is_valid, clean_brand, error_msg = validate_and_clean_car_brand(text)
+        if not is_valid:
+            send_whatsapp_message(phone, error_msg)
             return
-        data["car_brand"] = text.strip().title()
+        data["car_brand"] = clean_brand
         USER_STATE[phone]["state"] = "REFINANCING_ASK_MODEL"
         _send_car_model_buttons(phone)
         return
 
     # ── Q5: Car model ────────────────────────────────────────────────
     if state == "REFINANCING_ASK_MODEL":
-        if text in ("REFI_MODEL_SWIFT", "REFI_MODEL_CRETA",
-                    "REFI_MODEL_NEXON", "REFI_MODEL_CITY", "REFI_MODEL_OTHER"):
-            model_map = {
-                "REFI_MODEL_SWIFT":  "Swift",
-                "REFI_MODEL_CRETA":  "Creta",
-                "REFI_MODEL_NEXON":  "Nexon",
-                "REFI_MODEL_CITY":   "City",
-                "REFI_MODEL_OTHER":  "Other",
-            }
-            data["car_model"] = model_map[text]
-            USER_STATE[phone]["state"] = "REFINANCING_ASK_YEAR"
-            _send_year_buttons(phone)
+        if text.startswith("REFI_MODEL_"):
+            if text == "REFI_MODEL_OTHER":
+                USER_STATE[phone]["state"] = "REFINANCING_ASK_MODEL_OTHER"
+                brand_name = data.get("car_brand", "car")
+                send_whatsapp_message(
+                    phone,
+                    f"✏️ Please *type the model name* of your {brand_name}:"
+                )
+            else:
+                model_map = {
+                    "REFI_MODEL_SWIFT": "Swift", "REFI_MODEL_BALENO": "Baleno", "REFI_MODEL_WAGONR": "Wagon R", "REFI_MODEL_BREZZA": "Brezza", "REFI_MODEL_DZIRE": "Dzire",
+                    "REFI_MODEL_CRETA": "Creta", "REFI_MODEL_I20": "i20", "REFI_MODEL_VENUE": "Venue", "REFI_MODEL_GRANDI10": "Grand i10", "REFI_MODEL_VERNA": "Verna",
+                    "REFI_MODEL_NEXON": "Nexon", "REFI_MODEL_PUNCH": "Punch", "REFI_MODEL_TIAGO": "Tiago", "REFI_MODEL_HARRIER": "Harrier", "REFI_MODEL_SAFARI": "Safari",
+                    "REFI_MODEL_XUV700": "XUV700", "REFI_MODEL_SCORPIO": "Scorpio", "REFI_MODEL_THAR": "Thar", "REFI_MODEL_BOLERO": "Bolero", "REFI_MODEL_XUV300": "XUV300",
+                    "REFI_MODEL_CITY": "City", "REFI_MODEL_AMAZE": "Amaze", "REFI_MODEL_ELEVATE": "Elevate", "REFI_MODEL_WRV": "WR-V",
+                    "REFI_MODEL_INNOVA": "Innova", "REFI_MODEL_FORTUNER": "Fortuner", "REFI_MODEL_GLANZA": "Glanza", "REFI_MODEL_URBAN_CRUISER": "Urban Cruiser",
+                }
+                if text in model_map:
+                    data["car_model"] = model_map[text]
+                    USER_STATE[phone]["state"] = "REFINANCING_ASK_YEAR"
+                    _send_year_buttons(phone)
+                else:
+                    send_whatsapp_message(phone, "⚠️ Please select your car model from the list.")
+                    _send_car_model_buttons(phone)
         else:
             send_whatsapp_message(phone, "⚠️ Please select your car model from the list.")
             _send_car_model_buttons(phone)
         return
 
+    # ── Q5b: Other model – manual text input ─────────────────────────
+    if state == "REFINIGNING_ASK_MODEL_OTHER" or state == "REFINANCING_ASK_MODEL_OTHER":
+        from utils import validate_and_clean_car_model
+        is_valid, clean_model, error_msg = validate_and_clean_car_model(text)
+        if not is_valid:
+            send_whatsapp_message(phone, error_msg)
+            return
+        data["car_model"] = clean_model
+        USER_STATE[phone]["state"] = "REFINANCING_ASK_YEAR"
+        _send_year_buttons(phone)
+        return
+
     # ── Q6: Year of manufacture ──────────────────────────────────────
     if state == "REFINANCING_ASK_YEAR":
-        if text in ("REFI_YEAR_2023", "REFI_YEAR_2022", "REFI_YEAR_2021",
+        if text in ("REFI_YEAR_2026", "REFI_YEAR_2025", "REFI_YEAR_2024", "REFI_YEAR_2023", "REFI_YEAR_2022", "REFI_YEAR_2021",
                     "REFI_YEAR_2020", "REFI_YEAR_2019", "REFI_YEAR_OLDER"):
             year_map = {
+                "REFI_YEAR_2026":  "2026",
+                "REFI_YEAR_2025":  "2025",
+                "REFI_YEAR_2024":  "2024",
                 "REFI_YEAR_2023":  "2023",
                 "REFI_YEAR_2022":  "2022",
                 "REFI_YEAR_2021":  "2021",
@@ -490,8 +525,34 @@ def refinancing_flow_handler(phone: str, text: str):
             "REFI_CONTACT_TODAY":   "Today",
             "REFI_CONTACT_TOMORROW":"Tomorrow",
         }
+        
+        # Resolve selected contact preference (ID or free text)
+        selected_id = None
         if text in pref_map:
-            data["contact_preference"] = pref_map[text]
+            selected_id = text
+        else:
+            t = text.lower().strip()
+            if any(k in t for k in ["30 min", "30min", "soon", "immediately", "quick"]):
+                selected_id = "REFI_CONTACT_30MIN"
+            elif "today" in t:
+                selected_id = "REFI_CONTACT_TODAY"
+            elif "tomorrow" in t:
+                selected_id = "REFI_CONTACT_TOMORROW"
+
+        if selected_id:
+            # Check 5:00 PM cutoff for same-day contact options
+            now = datetime.now()
+            current_time_float = now.hour + now.minute / 60.0
+            if current_time_float >= 17.0 and selected_id in ("REFI_CONTACT_30MIN", "REFI_CONTACT_TODAY"):
+                send_whatsapp_message(
+                    phone,
+                    "⚠️ Our finance team is available from 9:00 AM to 5:00 PM. "
+                    "Since it is past 5:00 PM, please choose Tomorrow for us to contact you:"
+                )
+                _send_contact_preference(phone)
+                return
+
+            data["contact_preference"] = pref_map[selected_id]
             # ── Save lead to DB ───────────────────────────────────────
             lead_id = save_refinancing_lead(data)
             # ── Reset flow state ──────────────────────────────────────
@@ -617,19 +678,70 @@ def _send_car_brand_buttons(phone: str):
 
 
 def _send_car_model_buttons(phone: str):
-    sections = [{
-        "title": "Car Model",
-        "rows": [
-            {"id": "REFI_MODEL_SWIFT", "title": "Swift",  "description": ""},
-            {"id": "REFI_MODEL_CRETA", "title": "Creta",  "description": ""},
-            {"id": "REFI_MODEL_NEXON", "title": "Nexon",  "description": ""},
-            {"id": "REFI_MODEL_CITY",  "title": "City",   "description": ""},
-            {"id": "REFI_MODEL_OTHER", "title": "Other",  "description": ""},
+    brand = USER_STATE.get(phone, {}).get("refinancing", {}).get("car_brand", "")
+    
+    brand_models = {
+        "Maruti Suzuki": [
+            {"id": "REFI_MODEL_SWIFT", "title": "Swift", "description": ""},
+            {"id": "REFI_MODEL_BALENO", "title": "Baleno", "description": ""},
+            {"id": "REFI_MODEL_WAGONR", "title": "Wagon R", "description": ""},
+            {"id": "REFI_MODEL_BREZZA", "title": "Brezza", "description": ""},
+            {"id": "REFI_MODEL_DZIRE", "title": "Dzire", "description": ""},
+        ],
+        "Hyundai": [
+            {"id": "REFI_MODEL_CRETA", "title": "Creta", "description": ""},
+            {"id": "REFI_MODEL_I20", "title": "i20", "description": ""},
+            {"id": "REFI_MODEL_VENUE", "title": "Venue", "description": ""},
+            {"id": "REFI_MODEL_GRANDI10", "title": "Grand i10", "description": ""},
+            {"id": "REFI_MODEL_VERNA", "title": "Verna", "description": ""},
+        ],
+        "Tata": [
+            {"id": "REFI_MODEL_NEXON", "title": "Nexon", "description": ""},
+            {"id": "REFI_MODEL_PUNCH", "title": "Punch", "description": ""},
+            {"id": "REFI_MODEL_TIAGO", "title": "Tiago", "description": ""},
+            {"id": "REFI_MODEL_HARRIER", "title": "Harrier", "description": ""},
+            {"id": "REFI_MODEL_SAFARI", "title": "Safari", "description": ""},
+        ],
+        "Mahindra": [
+            {"id": "REFI_MODEL_XUV700", "title": "XUV700", "description": ""},
+            {"id": "REFI_MODEL_SCORPIO", "title": "Scorpio", "description": ""},
+            {"id": "REFI_MODEL_THAR", "title": "Thar", "description": ""},
+            {"id": "REFI_MODEL_BOLERO", "title": "Bolero", "description": ""},
+            {"id": "REFI_MODEL_XUV300", "title": "XUV300", "description": ""},
+        ],
+        "Honda": [
+            {"id": "REFI_MODEL_CITY", "title": "City", "description": ""},
+            {"id": "REFI_MODEL_AMAZE", "title": "Amaze", "description": ""},
+            {"id": "REFI_MODEL_ELEVATE", "title": "Elevate", "description": ""},
+            {"id": "REFI_MODEL_WRV", "title": "WR-V", "description": ""},
+        ],
+        "Toyota": [
+            {"id": "REFI_MODEL_INNOVA", "title": "Innova", "description": ""},
+            {"id": "REFI_MODEL_FORTUNER", "title": "Fortuner", "description": ""},
+            {"id": "REFI_MODEL_GLANZA", "title": "Glanza", "description": ""},
+            {"id": "REFI_MODEL_URBAN_CRUISER", "title": "Urban Cruiser", "description": ""},
         ]
+    }
+    
+    rows = brand_models.get(brand, [])
+    
+    if not rows:
+        USER_STATE[phone]["state"] = "REFINANCING_ASK_MODEL_OTHER"
+        send_whatsapp_message(
+            phone,
+            f"✏️ Please *type the model name* of your {brand or 'car'}:"
+        )
+        return
+        
+    rows.append({"id": "REFI_MODEL_OTHER", "title": "Other", "description": "Type manually"})
+    
+    sections = [{
+        "title": f"{brand[:20]} Models",
+        "rows": rows
     }]
     send_list_message(
         phone,
-        " What is the *model* of your car?",
+        f" What is the *model* of your {brand}?",
         "Select Model",
         sections
     )
@@ -639,6 +751,9 @@ def _send_year_buttons(phone: str):
     sections = [{
         "title": "Year of Manufacture",
         "rows": [
+            {"id": "REFI_YEAR_2026",  "title": "2026",        "description": ""},
+            {"id": "REFI_YEAR_2025",  "title": "2025",        "description": ""},
+            {"id": "REFI_YEAR_2024",  "title": "2024",        "description": ""},
             {"id": "REFI_YEAR_2023",  "title": "2023",        "description": ""},
             {"id": "REFI_YEAR_2022",  "title": "2022",        "description": ""},
             {"id": "REFI_YEAR_2021",  "title": "2021",        "description": ""},
@@ -675,13 +790,23 @@ def _send_loan_requirement_buttons(phone: str):
 
 
 def _send_contact_preference(phone: str):
-    send_button_message(
-        phone,
-        "📅 *Lead Conversion*\n\n"
-        "When would you like our finance advisor to contact you?",
-        [
+    now = datetime.now()
+    current_time_float = now.hour + now.minute / 60.0
+    
+    if current_time_float >= 17.0:  # After 5:00 PM
+        buttons = [
+            {"type": "reply", "reply": {"id": "REFI_CONTACT_TOMORROW", "title": "🗓 Tomorrow"}},
+        ]
+    else:
+        buttons = [
             {"type": "reply", "reply": {"id": "REFI_CONTACT_30MIN",    "title": "⚡ Within 30 mins"}},
             {"type": "reply", "reply": {"id": "REFI_CONTACT_TODAY",    "title": "📅 Today"}},
             {"type": "reply", "reply": {"id": "REFI_CONTACT_TOMORROW", "title": "🗓 Tomorrow"}},
         ]
+        
+    send_button_message(
+        phone,
+        "📅 *Lead Conversion*\n\n"
+        "When would you like our finance advisor to contact you?",
+        buttons
     )

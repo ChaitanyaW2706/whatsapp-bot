@@ -213,10 +213,9 @@ def get_used_cars_by_budget(min_price, max_price):
     cur = conn.cursor(dictionary=True)
 
     cur.execute("""
-        SELECT serial_number, make, model, manufacturing_year, fuel_type,
-               mileage_km, estimated_selling_price, image_url
+        SELECT *
         FROM carstockdata
-        WHERE LOWER(ready_for_sales) = 'available'
+        WHERE LOWER(ready_for_sales) IN ('available', 'yes')
           AND estimated_selling_price BETWEEN %s AND %s
         ORDER BY estimated_selling_price ASC
         LIMIT 5
@@ -233,7 +232,7 @@ def get_car_types_by_budget(min_price, max_price):
     query = """
         SELECT DISTINCT `type`
         FROM carstockdata
-        WHERE LOWER(ready_for_sales) = 'available'
+        WHERE LOWER(ready_for_sales) IN ('available', 'yes')
           AND estimated_selling_price BETWEEN %s AND %s
           AND `type` IS NOT NULL
           AND TRIM(`type`) != ''

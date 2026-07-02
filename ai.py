@@ -54,7 +54,7 @@ def _keyword_fallback_general(text: str) -> str:
         )
     if any(w in t for w in ['car', 'price', 'buy', 'new', 'hyundai', 'model', 'variant', 'booking', 'test drive']):
         return (
-            "🚗 AutoSherpa — Sherpa Hyundai offers the latest Hyundai cars.\n\n"
+            "🚗 AutoSherpa offers a wide range of new cars.\n\n"
             "Please type *Hi* and select *New Cars* from the menu to explore models & prices."
         )
     if any(w in t for w in ['used', 'second hand', 'pre-owned', 'old car', 'certified']):
@@ -202,7 +202,7 @@ def _keyword_fallback_sales(text: str) -> str:
         )
     if any(w in t for w in ['emi', 'finance', 'loan', 'down payment']):
         return (
-            "💳 We offer flexible EMI and finance options on all Hyundai cars.\n\n"
+            "💳 We offer flexible EMI and finance options on all cars.\n\n"
             "Please speak with our sales advisor for personalised finance plans.\n"
             "Type *Hi* to go back to the main menu."
         )
@@ -237,12 +237,12 @@ def _keyword_fallback_used_cars(text: str) -> str:
 def get_ai_response(message: str):
     """General AI used in webhook START state and MENU state free-text fallback."""
 
-    system_prompt = """You are Sherpa, the friendly virtual assistant for AutoSherpa — a trusted Hyundai dealership and automotive services hub in Bengaluru, India.
+    system_prompt = """You are Sherpa, the friendly virtual assistant for AutoSherpa — a trusted multi-brand dealership and automotive services hub in Bengaluru, India.
 
 Your personality: warm, polite, helpful — like a knowledgeable friend at the dealership who genuinely wants to help. You speak naturally and professionally, never robotic.
 
 AutoSherpa services you can discuss:
-• New Hyundai car sales — models, prices, variants, colours, test drives, finance/EMI
+• New car sales — models, prices, variants, colours, test drives, finance/EMI
 • Certified pre-owned / used cars — budget options, inspection, test drives, valuation
 • Motor insurance — renewal, estimates, policy info, NCB, premium queries
 • Vehicle service & maintenance — bookings, history, cost estimates, repairs
@@ -616,7 +616,7 @@ def _get_used_cars_db_context(budget_min: int = None, budget_max: int = None) ->
                        transmission_type, mileage_km,
                        estimated_selling_price
                 FROM   carstockdata
-                WHERE  ready_for_sales = 'available'
+                WHERE  LOWER(ready_for_sales) IN ('available', 'yes')
                   AND  estimated_selling_price BETWEEN %s AND %s
                 ORDER BY estimated_selling_price ASC
                 LIMIT 10
@@ -627,7 +627,7 @@ def _get_used_cars_db_context(budget_min: int = None, budget_max: int = None) ->
                        transmission_type, mileage_km,
                        estimated_selling_price
                 FROM   carstockdata
-                WHERE  ready_for_sales = 'available'
+                WHERE  LOWER(ready_for_sales) IN ('available', 'yes')
                 ORDER BY estimated_selling_price ASC
                 LIMIT 15
             """)
@@ -659,7 +659,7 @@ def _get_targeted_car_details(user_text: str) -> str:
         cur = conn.cursor(dictionary=True)
         
         # 1. Fetch all unique models to check for matches
-        cur.execute("SELECT DISTINCT model, make FROM carstockdata WHERE ready_for_sales = 'available' LIMIT 100")
+        cur.execute("SELECT DISTINCT model, make FROM carstockdata WHERE LOWER(ready_for_sales) IN ('available', 'yes') LIMIT 100")
         available_cars = cur.fetchall()
         
         target_model = None
@@ -681,7 +681,7 @@ def _get_targeted_car_details(user_text: str) -> str:
                    manufacturing_year, mileage_km, transmission_type,
                    estimated_selling_price, cubic_capacity_cc, insurance_type
             FROM   carstockdata
-            WHERE  model = %s AND ready_for_sales = 'available'
+            WHERE  model = %s AND LOWER(ready_for_sales) IN ('available', 'yes')
             LIMIT 1
         """, (target_model,))
         r = cur.fetchone()
@@ -804,7 +804,7 @@ STRICT RULES:
 - NEVER say "temporarily unavailable" — always give a useful answer or acknowledge gracefully
 - Do NOT end every reply with "Type *Hi* to explore all options" — only add it when genuinely useful to guide the user to the menu (e.g. after answering a renewal/estimate intent)"""
 
-_SALES_SYSTEM = """You are *AutoSherpa's New Cars Expert* — a friendly, knowledgeable, and professional advisor for the latest Hyundai vehicles at Sherpa Hyundai, Bengaluru.
+_SALES_SYSTEM = """You are *AutoSherpa's New Cars Expert* — a friendly, knowledgeable, and professional advisor for the latest multi-brand vehicles at AutoSherpa, Bengaluru.
 
 🎯 YOUR OPERATIONAL STRATEGY:
 1. **Semantic Search First**: You MUST first check the 'SALES KNOWLEDGE CONTEXT (FAQ/RAG)' for relevant information. If specific answers are found there (e.g., about policies, documentation, specific features, or sales procedures), respond using that data accurately.
@@ -827,7 +827,7 @@ STRICT RULES:
 
 
 
-_USED_CARS_SYSTEM = """You are *AutoSherpa's Used Cars Expert* — a friendly, knowledgeable, and professional advisor for pre-owned vehicles at Sherpa Hyundai, Bengaluru.
+_USED_CARS_SYSTEM = """You are *AutoSherpa's Used Cars Expert* — a friendly, knowledgeable, and professional advisor for pre-owned vehicles at AutoSherpa, Bengaluru.
 
 YOUR ROLE:
 You help customers with any queries related to used cars. This includes:
@@ -848,7 +848,7 @@ STRICT RULES:
 - If the customer wants to book a test drive or get a valuation, guide them to use the menu options.
 - End your response with a helpful nudge if appropriate."""
 
-_SERVICE_SYSTEM = """You are the official Service Expert for AutoSherpa (Sherpa Hyundai), Bengaluru.
+_SERVICE_SYSTEM = """You are the official Service Expert for AutoSherpa, Bengaluru.
 You assist customers with all aspects of vehicle service, maintenance, and technical queries.
 
 🎯 CORE GUIDELINES:
@@ -863,7 +863,7 @@ Format lists clearly and use emojis (🔧 🚗 📅 💰) to keep the interactio
 End every reply with a helpful next step (e.g. "Let me know if you'd like to see more details")."""
 
 
-_REFINANCING_SYSTEM = """You are *AutoSherpa's Refinancing Expert* — a specialized consultant for car loans, EMI reduction, and loan-against-car solutions at Sherpa Hyundai, Bengaluru.
+_REFINANCING_SYSTEM = """You are *AutoSherpa's Refinancing Expert* — a specialized consultant for car loans, EMI reduction, and loan-against-car solutions at AutoSherpa, Bengaluru.
 
 🎯 YOUR OPERATIONAL STRATEGY:
 1. **Semantic Search First**: You MUST first check the 'REFINANCING KNOWLEDGE CONTEXT (FAQ/RAG)' for relevant information about policies, eligibility, documentation, and procedures.
@@ -1462,31 +1462,36 @@ def _detect_service_follow_on_action(user_text: str, ai_reply: str) -> str:
     """
     t = user_text.lower()
     
-    # 1. Human / Advisor / Emergency escalation (TALK_TO_ADVISOR)
-    human_keywords = [
-        "live agent", "human", "real person", "talk to someone", "speak to someone",
-        "advisor", "contact advisor", "technical support", "manager", "complaint",
-        "strange noise", "smoke", "brake", "clutch", "engine light", "overheating",
-        "accident", "breakdown", "emergency", "useless bot", "not helping",
-        "leak", "vibration", "steering", "gear", "abs", "airbag", "fault"
-    ]
-    if any(k in t for k in human_keywords):
-        return "TALK_TO_ADVISOR"
+    # 0. Pure Knowledge / Question Check
+    question_starters = ["what", "how", "why", "when", "can i", "is there", "are there", "tell me about", "do you"]
+    is_question = any(t.startswith(s) for s in question_starters) or "?" in t
     
-    # 2. Booking intent
-    book_keywords = ["book", "appointment", "schedule", "slot", "reserve", "timing"]
-    if any(k in t for k in book_keywords):
-        return "BOOK_APPOINTMENT"
-    
-    # 3. Estimate intent
-    estimate_keywords = ["estimate", "cost", "price", "how much", "quote", "charge"]
-    if any(k in t for k in estimate_keywords):
-        return "GET_ESTIMATE"
-    
-    # 4. History intent
-    history_keywords = ["history", "past service", "previous", "record", "last service", "bill amount"]
-    if any(k in t for k in history_keywords):
-        return "SERVICE_HISTORY"
+    if not is_question:
+        # 1. Human / Advisor / Emergency escalation (TALK_TO_ADVISOR)
+        human_keywords = [
+            "live agent", "human", "real person", "talk to someone", "speak to someone",
+            "advisor", "contact advisor", "technical support", "manager", "complaint",
+            "strange noise", "smoke", "brake", "clutch", "engine light", "overheating",
+            "accident", "breakdown", "emergency", "useless bot", "not helping",
+            "leak", "vibration", "steering", "gear", "abs", "airbag", "fault"
+        ]
+        if any(k in t for k in human_keywords):
+            return "TALK_TO_ADVISOR"
+        
+        # 2. Booking intent
+        book_keywords = ["book", "appointment", "schedule", "slot", "reserve", "timing"]
+        if any(k in t for k in book_keywords):
+            return "BOOK_APPOINTMENT"
+        
+        # 3. Estimate intent
+        estimate_keywords = ["estimate", "cost", "price", "quote", "charge"]
+        if any(k in t for k in estimate_keywords):
+            return "GET_ESTIMATE"
+        
+        # 4. History intent
+        history_keywords = ["history", "past service", "previous", "record", "last service", "bill amount"]
+        if any(k in t for k in history_keywords):
+            return "SERVICE_HISTORY"
     
     # 5. LLM-based refined classification for complex natural language
     try:

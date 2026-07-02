@@ -16,7 +16,7 @@ from config import USER_STATE
 load_dotenv()
 
 # Initialize Groq client
-from llm_config import groq_client as _client, MODEL_NAME as _MODEL_NAME
+from llm_config import groq_client as _client, MODEL_NAME as _MODEL_NAME, smart_llm_call
 
 # ============================================================
 # TOKEN MANAGEMENT
@@ -131,6 +131,38 @@ def format_mobile(phone: str) -> str:
     if len(phone) == 10:
         return f"+91-{phone}"
     return phone
+
+
+def is_valid_vehicle_reg(reg_no: str) -> tuple[bool, str]:
+    """
+    Validates an Indian vehicle registration number.
+    Returns: (is_valid, cleaned_uppercase_reg_number)
+    """
+    if not reg_no:
+        return False, ""
+        
+    clean_reg = reg_no.upper().replace(" ", "").replace("-", "")
+    
+    patterns = [
+        # 1. Standard, Old, Delhi, EV, Commercial: KA01AB1234, MH011234, DL1T2468, DL3CAF1234
+        r"^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{1,4}$",
+        # 2. Bharat Series: 22BH1234AA
+        r"^\d{2}BH\d{4}[A-Z]{1,2}$",
+        # 3. Diplomatic: 77CD1, 11CC432
+        r"^\d{1,3}[A-Z]{2}\d{1,6}$",
+        # 4. Military: 25B123456P
+        r"^\d{2}[A-Z]\d{1,6}[A-Z]$",
+        # 5. Temporary: TS07TR2025123 (Restricted to TR/TC/TMP to prevent false positives)
+        r"^[A-Z]{2}\d{1,2}(?:TR|TC|TMP)\d{4,7}$"
+    ]
+    
+    for pattern in patterns:
+        if re.match(pattern, clean_reg):
+            return True, clean_reg
+            
+    return False, clean_reg
+
+
 
 
 def normalize_text(text: str) -> str:
@@ -639,6 +671,7 @@ _STRUCTURED_INPUT_STATES = {
     "REFINANCING_ASK_PHONE",        # expects phone
     "REFINANCING_ASK_CITY",         # expects city
     "REFINANCING_ASK_BRAND_OTHER",  # expects brand name
+    "REFINANCING_ASK_MODEL_OTHER",  # expects model name
     "REFINANCING_ASK_MODEL",        # expects model name
     "REFINANCING_ASK_YEAR",         # expects year
     "REFINANCING_ASK_HAS_LOAN",    # loan status selection
@@ -667,6 +700,26 @@ _STRUCTURED_INPUT_STATES = {
     "EXCH_COLLECT_CITY",
     "EXCH_FINANCE_CALLBACK",
     "EXCH_TD_ADDRESS",
+    "EXCH_BRAND",
+    "EXCH_BRAND_ENTER",
+    "EXCH_MODEL",
+    "EXCH_MODEL_ENTER",
+    "EXCH_YEAR",
+    "EXCH_FUEL",
+    "EXCH_TRANS",
+    "EXCH_KM",
+    "EXCH_OWNERS",
+    "EXCH_CONDITION",
+    "EXCH_INSURANCE",
+    "EXCH_DOCS",
+    "EXCH_TYPE",
+    "EXCH_BUDGET",
+    "EXCH_NEW_BRAND",
+    "EXCH_NEW_BRAND_ENTER",
+    "EXCH_NEW_MODEL",
+    "EXCH_NEW_MODEL_ENTER",
+    "EXCH_NEW_FUEL",
+    "EXCH_NEW_TRANS",
 
     # Service: name/address collection (prevent AI interference)
     "waiting_full_name",
@@ -1079,3 +1132,583 @@ Guidelines:
             "flow_action": None,
             "confidence": 0.5
         }
+
+
+# ============================================================
+# CUSTOMER NAME VALIDATOR & CLEANER
+# ============================================================
+
+def validate_and_clean_name(text: str) -> tuple[bool, str, str]:
+    """
+    Validates if the user input represents a valid/meaningful customer name.
+    Returns: (is_valid, clean_name, fallback_message)
+    """
+    t = text.strip()
+    if not t:
+        return False, "", "I'm sorry, I didn't receive a name. Could you please provide your name? 👤"
+    
+    t_lower = t.lower()
+    
+    # 1. Repeating characters check (e.g., "sss", "ccc", "aaaa")
+    if len(t) > 1 and len(set(t_lower)) == 1:
+        return False, "", "I'm sorry, that doesn't seem to be a valid name. Could you please share your correct name? 👤"
+        
+    # 2. Too short or pure digits
+    if len(t) < 2 or t.isdigit():
+        return False, "", "I'm sorry, that doesn't seem to be a valid name. Could you please share your correct name? 👤"
+        
+    # 3. Known common greeting/cancellation/refusal words that shouldn't be names
+    refusal_words = {"no", "yes", "stop", "cancel", "bye", "hi", "hello", "hey", "test", "none", "na", "n/a", "ok", "okay"}
+    if t_lower in refusal_words:
+        return False, "", "I'm sorry, that doesn't seem to be a valid name. Could you please share your correct name? 👤"
+        
+    # Call LLM for expert validation
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a professional name validator for an automotive customer support chatbot. Respond ONLY with a valid JSON object."
+        },
+        {
+            "role": "user",
+            "content": f"""Analyze the user input to determine if it represents a valid customer name.
+User Input: "{t}"
+
+Rules:
+1. is_valid (boolean): True if it is a realistic first name, last name, or full name, or if a realistic name can be extracted. False if it is gibberish/random letters (e.g., sss, cc, xyz, abc, qwe, asdf), placeholder name (e.g., test, dummy, user), digit strings, or conversational filler with no name.
+2. clean_name (string or null): Properly capitalized extracted name (e.g., "Amit Sharma" or "Rahul"). Null if invalid.
+3. fallback_message (string or null): A polite, professional fallback message asking for their correct name to update their details if invalid. Null if valid.
+
+Return JSON format:
+{{"is_valid": true/false, "clean_name": "extracted_name" or null, "fallback_message": "message" or null}}"""
+        }
+    ]
+    
+    try:
+        result = smart_llm_call(
+            messages=messages,
+            temperature=0.1,
+            max_tokens=150,
+            response_format={"type": "json_object"},
+            as_json=True
+        )
+        is_valid = result.get("is_valid", False)
+        clean_name = result.get("clean_name")
+        fallback = result.get("fallback_message")
+        
+        if is_valid and clean_name:
+            return True, clean_name, ""
+        else:
+            if not fallback:
+                fallback = "I'm sorry, that doesn't seem to be a valid name. Could you please share your correct name? 👤"
+            return False, "", fallback
+    except Exception as e:
+        print(f"[name_validator] LLM validation error: {e}")
+        # Fallback to basic regex if LLM fails
+        if re.match(r'^[A-Za-z\s\.\-\']{2,40}$', t) and not any(w in refusal_words for w in t_lower.split()):
+            if len(set(t_lower.replace(" ", ""))) > 1:
+                return True, t.title(), ""
+        return False, "", "I'm sorry, that doesn't seem to be a valid name. Could you please share your correct name? 👤"
+
+# ============================================================
+# CUSTOMER LOCATION VALIDATOR & CLEANER
+# ============================================================
+
+def validate_and_clean_location(text: str) -> tuple[bool, str, str]:
+    """
+    Validates if the user input represents a valid/meaningful location, address, or city.
+    Returns: (is_valid, clean_location, fallback_message)
+    """
+    t = text.strip()
+    if not t:
+        return False, "", "I'm sorry, I didn't receive a location. Could you please provide your valid location or address? 📍"
+    
+    t_lower = t.lower()
+    
+    # 1. Repeating characters check (e.g., "sss", "ccc", "aaaa")
+    if len(t) > 1 and len(set(t_lower)) == 1:
+        return False, "", "I'm sorry, that doesn't seem to be a valid location. Could you please provide a real address or neighborhood? 📍"
+        
+    # 2. Too short (unless it's a known short abbreviation like "mg") or pure digits without text
+    if t.isdigit():
+        return False, "", "I'm sorry, please provide a street name, neighborhood, or city instead of just numbers. 📍"
+        
+    # 3. Known common greeting/cancellation/refusal words that shouldn't be locations
+    refusal_words = {"no", "yes", "stop", "cancel", "bye", "hi", "hello", "hey", "test", "dummy", "none", "na", "n/a", "ok", "okay", "i don't know", "skip"}
+    if t_lower in refusal_words:
+        return False, "", "I'm sorry, that doesn't seem to be a valid location. Could you please provide your valid address or neighborhood? 📍"
+        
+    # Call LLM for expert validation
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a professional location and address validator for an automotive customer support chatbot in India. Respond ONLY with a valid JSON object."
+        },
+        {
+            "role": "user",
+            "content": f"""Analyze the user input to determine if it represents a valid location, city, neighborhood, or full address.
+User Input: "{t}"
+
+Rules:
+1. is_valid (boolean): True if it is a realistic location, neighborhood, city, landmark, or full address. Valid examples include common short abbreviations (e.g., "HSR", "BTM", "ECity", "RR Nagar", "JP Nagar"), street names ("MG Road"), single words ("Whitefield", "Marathahalli", "Bangalore"), and structured addresses. False if it is gibberish/random letters (e.g., "lls", "abc", "rrd", "xyz", "qwerty"), conversational filler (e.g., "ok", "yes", "dummy"), or pure numbers without context (e.g., "12345").
+2. clean_location (string or null): Properly capitalized extracted location (e.g., "HSR Layout", "BTM", "MG Road"). Null if invalid.
+3. fallback_message (string or null): A polite, professional fallback message asking for their correct location/address if invalid. Null if valid.
+
+Return JSON format:
+{{"is_valid": true/false, "clean_location": "extracted_location" or null, "fallback_message": "message" or null}}"""
+        }
+    ]
+    
+    try:
+        from llm_config import smart_llm_call
+        result = smart_llm_call(
+            messages=messages,
+            temperature=0.1,
+            max_tokens=150,
+            response_format={"type": "json_object"},
+            as_json=True
+        )
+        is_valid = result.get("is_valid", False)
+        clean_loc = result.get("clean_location")
+        fallback = result.get("fallback_message")
+        
+        if is_valid and clean_loc:
+            return True, clean_loc, ""
+        else:
+            if not fallback:
+                fallback = "I'm sorry, that doesn't seem to be a valid location. Could you please provide a real address or neighborhood? 📍"
+            return False, "", fallback
+    except Exception as e:
+        print(f"[location_validator] LLM validation error: {e}")
+        # Fallback to basic regex if LLM fails: letters/numbers/spaces/commas longer than 2 chars
+        if re.match(r'^[A-Za-z0-9\s\,\.\-\#\/]{2,100}$', t) and not any(w in refusal_words for w in t_lower.split()):
+            if len(set(t_lower.replace(" ", ""))) > 1:
+                return True, t.title(), ""
+        return False, "", "I'm sorry, that doesn't seem to be a valid location. Could you please provide a real address or neighborhood? 📍"
+
+
+# ============================================================
+# TIME SLOT & DATE CUTOFF DYNAMIC FILTERING
+# ============================================================
+
+def get_slot_start_hour(slot_id: str, slot_title: str = "") -> float:
+    """
+    Map a slot ID or title to its start hour.
+    """
+    slot_id_lower = str(slot_id).lower()
+    slot_title_lower = str(slot_title).lower() if slot_title else ""
+    
+    # 1. Morning slots
+    if "morning" in slot_id_lower or "morning" in slot_title_lower:
+        if "9am" in slot_title_lower or "9-12" in slot_title_lower:
+            return 9.0   # 9:00 AM
+        return 10.0      # Default 10:00 AM
+        
+    # 2. Evening slots
+    if "evening" in slot_id_lower or "evening" in slot_title_lower:
+        if "3-6" in slot_title_lower or "3 - 6" in slot_title_lower:
+            return 15.0  # 3:00 PM
+        return 16.0      # Default fallback 4:00 PM (starts at 4 PM)
+        
+    # 3. Afternoon slots
+    if "afternoon" in slot_id_lower or "afternoon" in slot_title_lower:
+        if "1pm-3pm" in slot_title_lower or "1 pm - 3 pm" in slot_title_lower or "1-3" in slot_title_lower:
+            return 13.0  # 1:00 PM
+        return 12.0      # Default fallback 12:00 PM
+        
+    # 4. Anytime slot (starts at latest slot cutoff start: 4:00 PM)
+    if "anytime" in slot_id_lower or "anytime" in slot_title_lower:
+        return 16.0
+        
+    return 16.0  # Default fallback
+
+def is_slot_available_today(slot_id: str, slot_title: str = "") -> bool:
+    """
+    Returns True if the slot has not started yet today (current time < start hour).
+    """
+    now = datetime.now()
+    current_time_float = now.hour + now.minute / 60.0
+    start_hour = get_slot_start_hour(slot_id, slot_title)
+    return current_time_float < start_hour
+
+def is_booking_date_today(phone: str) -> bool:
+    """
+    Determines if the customer's currently selected booking date is today.
+    """
+    from config import USER_STATE
+    today_str1 = datetime.now().strftime("%d-%m-%Y")  # e.g., "05-06-2026"
+    today_str2 = datetime.now().strftime("%Y-%m-%d")  # e.g., "2026-06-05"
+    
+    def match_today(val):
+        if not val:
+            return False
+        if isinstance(val, date):
+            return val == datetime.now().date()
+        val_str = str(val).strip().lower()
+        if "today" in val_str:
+            return True
+        if today_str1 in val_str or today_str2 in val_str:
+            return True
+        
+        # Try extracting 8 digit date (e.g. YYYYMMDD)
+        import re
+        m = re.search(r'\d{8}', val_str)
+        if m:
+            if m.group(0) == datetime.now().strftime("%Y%m%d"):
+                return True
+        return False
+
+    # Check USER_STATE (Insurance, Sales, Used Cars)
+    if phone in USER_STATE:
+        state_data = USER_STATE[phone]
+        if match_today(state_data.get("renew", {}).get("date")):
+            return True
+        if match_today(state_data.get("preferred_when")) or match_today(state_data.get("preferred_when_raw")):
+            return True
+        if match_today(state_data.get("test_drive_date")) or match_today(state_data.get("exch_td_date")) or match_today(state_data.get("callback_date")):
+            return True
+
+    # Check Service Bot Sessions
+    try:
+        from flows.service import bot as service_bot
+        if phone in service_bot.user_sessions:
+            sess = service_bot.user_sessions[phone]
+            booking_data = sess.get('booking_data', {})
+            if match_today(booking_data.get('date')) or match_today(booking_data.get('selected_date')) or match_today(booking_data.get('appointment_date')):
+                return True
+            contact_data = sess.get('contact_data', {})
+            if match_today(contact_data.get('callback_date')) or match_today(contact_data.get('video_date')):
+                return True
+    except Exception:
+        pass
+
+    return False
+
+def get_latest_possible_slot_start_hour(phone: str) -> float:
+    """
+    Returns the latest starting slot hour for the user's active flow today.
+    """
+    # All evening slots across all modules start at 4 PM (16.0).
+    return 16.0
+
+def is_today_bookable(phone: str) -> bool:
+    """
+    Returns True if same-day bookings are still open.
+    """
+    now = datetime.now()
+    current_time_float = now.hour + now.minute / 60.0
+    latest_start_hour = get_latest_possible_slot_start_hour(phone)
+    return current_time_float < latest_start_hour
+
+def filter_date_options(phone: str, rows_or_buttons: list) -> list:
+    """
+    Hides the "Today" option if same-day bookings are closed.
+    """
+    if is_today_bookable(phone):
+        return rows_or_buttons
+        
+    filtered = []
+    for item in rows_or_buttons:
+        item_id = ""
+        item_title = ""
+        
+        if isinstance(item, dict):
+            if item.get("type") == "reply" and "reply" in item:
+                item_id = item["reply"].get("id", "")
+                item_title = item["reply"].get("title", "")
+            else:
+                item_id = item.get("id", "")
+                item_title = item.get("title", "")
+                
+        item_id_upper = str(item_id).upper()
+        item_title_lower = str(item_title).lower()
+        
+        is_today_option = (
+            "TODAY" in item_id_upper or 
+            item_title_lower == "today" or
+            "30MIN" in item_id_upper or
+            "30 mins" in item_title_lower
+        )
+        
+        if is_today_option:
+            print(f"⌛ Hiding Today option for {phone} because same-day booking window has closed.")
+            continue
+            
+        filtered.append(item)
+    return filtered
+
+def filter_lapsed_time_slots(phone: str, rows_or_buttons: list) -> list:
+    """
+    Hides lapsed slots if the selected booking date is Today.
+    """
+    if not is_booking_date_today(phone):
+        return rows_or_buttons
+        
+    filtered = []
+    for item in rows_or_buttons:
+        item_id = ""
+        item_title = ""
+        
+        if isinstance(item, dict):
+            if item.get("type") == "reply" and "reply" in item:
+                item_id = item["reply"].get("id", "")
+                item_title = item["reply"].get("title", "")
+            else:
+                item_id = item.get("id", "")
+                item_title = item.get("title", "")
+                
+        is_slot = False
+        item_id_upper = str(item_id).upper()
+        item_title_lower = str(item_title).lower()
+        
+        if any(w in item_id_upper for w in ("SLOT_", "TIME_", "MORNING", "AFTERNOON", "EVENING", "ANYTIME")):
+            is_slot = True
+        elif any(w in item_title_lower for w in ("morning", "afternoon", "evening", "anytime")):
+            is_slot = True
+            
+        if is_slot:
+            if not is_slot_available_today(item_id, item_title):
+                print(f"⏰ Hiding lapsed slot: {item_title or item_id} for {phone}")
+                continue
+                
+        filtered.append(item)
+    return filtered
+
+def format_custom_renewal_type(text: str) -> str:
+    """
+    Standardizes a custom renewal string to '<N>th Renewal' if a number is found.
+    """
+    import re
+    clean = text.strip()
+    match = re.search(r'\d+', clean)
+    if match:
+        num = int(match.group(0))
+        if 11 <= (num % 100) <= 13:
+            suffix = 'th'
+        else:
+            suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(num % 10, 'th')
+        return f"{num}{suffix} Renewal"
+    return clean.title()
+
+def validate_and_format_renewal_type(text: str) -> tuple[bool, str, str]:
+    """
+    Validates and formats a user's custom renewal type input.
+    Returns: (is_valid, formatted_value, fallback_message)
+    """
+    t = text.strip()
+    t_lower = t.lower()
+    
+    # Common words related to renewal
+    renewal_words = [
+        "renewal", "time", "year", "year's", "st", "nd", "rd", "th", 
+        "once", "twice", "first", "second", "third", "fourth", "fifth", 
+        "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth"
+    ]
+    
+    # Check if there is a number or standard renewal words
+    import re
+    num_match = re.search(r'\d+', t)
+    
+    is_valid_rule = False
+    if num_match:
+        is_valid_rule = True
+        
+    if is_valid_rule:
+        formatted = format_custom_renewal_type(t)
+        return True, formatted, ""
+        
+    # If rule checks are inconclusive, call the LLM
+    prompt = f"""
+    You are an AI expert validating a user's input for their vehicle insurance renewal count.
+    The user was asked: "Please type your renewal type:" (meaning which number of renewal this is, e.g. 7th, 8th, etc.).
+    The user typed: "{text}"
+    
+    Determine if this input is a valid representation of a renewal count or sequence (e.g. a number, ordinal, or text like "seventh", "7th", "seven", "7 times", "thirty first", "forty fifth").
+    If it is valid, extract the renewal count as a standardized string IN NUMERIC FORMAT (e.g. "7th Renewal", "10th Renewal", "31st Renewal", "45th Renewal").
+    CRITICAL: Even if the user types the number in words (like "forty fifth renewal"), you MUST convert it to digits (e.g. "45th Renewal"). Never output words for numbers.
+    If it is NOT related to a renewal type (e.g. gibberish, name, unrelated text), respond with a professional fallback message asking them to provide a valid renewal number.
+    
+    Format your response as a JSON object with the following keys:
+    - "is_valid": true/false
+    - "formatted_value": the standardized renewal string if valid (otherwise empty string)
+    - "fallback_message": a professional fallback message if invalid (otherwise empty string)
+    
+    Example response for valid:
+    {{
+      "is_valid": true,
+      "formatted_value": "45th Renewal",
+      "fallback_message": ""
+    }}
+    
+    Example response for invalid:
+    {{
+      "is_valid": false,
+      "formatted_value": "",
+      "fallback_message": "I'm sorry, I couldn't understand that. Could you please specify which number of renewal this is? (e.g., 7th Renewal, 8th Renewal, or simply type the number) 📝"
+    }}
+    """
+    
+    try:
+        from llm_config import smart_llm_call
+        response_text = smart_llm_call(
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}
+        )
+        import json
+        result = json.loads(response_text)
+        is_valid = result.get("is_valid", False)
+        formatted_val = result.get("formatted_value", "")
+        fallback_msg = result.get("fallback_message", "")
+        if is_valid and formatted_val:
+            return True, formatted_val, ""
+        else:
+            fallback = fallback_msg or "I'm sorry, I couldn't understand that. Could you please specify which number of renewal this is? (e.g., 7th Renewal, 8th Renewal, or simply type the number) 📝"
+            return False, "", fallback
+    except Exception as e:
+        print(f"[renewal_validator] LLM validation error: {e}")
+        return False, "", "I'm sorry, I couldn't understand that. Could you please specify which number of renewal this is? (e.g., 7th Renewal, 8th Renewal, or simply type the number) 📝"
+
+
+# ============================================================
+# CAR BRAND VALIDATOR & CLEANER
+# ============================================================
+
+def validate_and_clean_car_brand(text: str) -> tuple[bool, str, str]:
+    """
+    Validates if the user input represents a valid/meaningful car brand name.
+    Returns: (is_valid, clean_brand, fallback_message)
+    """
+    t = text.strip()
+    if not t:
+        return False, "", "⚠️ I didn't receive a brand name. Could you please type your car's brand? 🚗"
+    
+    t_lower = t.lower()
+    
+    # 1. Repeating characters check (e.g. "sss", "ccc", "aaaa")
+    if len(t) > 1 and len(set(t_lower)) == 1:
+        return False, "", "⚠️ That doesn't seem to be a valid car brand. Please type the correct brand name (e.g., Hyundai, Maruti, Tata): 🚗"
+        
+    # 2. Too short or contains special symbols only
+    import re
+    if len(t) < 2 or not re.match(r"^[A-Za-z0-9\s\-]+$", t):
+        return False, "", "⚠️ That doesn't seem to be a valid car brand. Please type the correct brand name (e.g., Hyundai, Maruti, Tata): 🚗"
+        
+    # 3. Known common greeting/refusal words
+    refusal_words = {"no", "yes", "stop", "cancel", "bye", "hi", "hello", "hey", "test", "dummy", "none", "na", "n/a", "ok", "okay", "i don't know", "skip"}
+    if t_lower in refusal_words:
+        return False, "", "⚠️ Please type a valid car brand (e.g., Hyundai, Maruti, Tata): 🚗"
+
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a professional automotive brand validator for an automotive chatbot. Respond ONLY with a valid JSON object."
+        },
+        {
+            "role": "user",
+            "content": f"""Analyze the user input to determine if it represents a valid, real-world automotive manufacturer/brand.
+User Input: "{t}"
+
+Rules:
+1. is_valid (boolean): True if it is a real automotive brand (e.g. Maruti, Tata, Mahindra, Hyundai, BMW, Toyota, Mercedes, Audi, Ford, Honda, etc.), or if a real brand can be extracted from the text. False if it is gibberish/random letters, digital noise, special symbols (e.g. M%, @brand), placeholder names, or conversational filler with no actual brand.
+2. clean_brand (string or null): Properly capitalized brand name. Null if invalid.
+3. fallback_message (string or null): A polite, professional fallback message asking for their correct car brand name if invalid. Null if valid.
+
+Return JSON format:
+{{"is_valid": true/false, "clean_brand": "extracted_brand" or null, "fallback_message": "message" or null}}"""
+        }
+    ]
+    
+    try:
+        from llm_config import smart_llm_call
+        result = smart_llm_call(
+            messages=messages,
+            temperature=0.1,
+            max_tokens=150,
+            response_format={"type": "json_object"},
+            as_json=True
+        )
+        is_valid = result.get("is_valid", False)
+        clean_brand = result.get("clean_brand")
+        fallback = result.get("fallback_message")
+        
+        if is_valid and clean_brand:
+            return True, clean_brand, ""
+        else:
+            if not fallback:
+                fallback = "⚠️ That doesn't seem to be a valid car brand. Please type the correct brand name (e.g., Hyundai, Maruti, Tata): 🚗"
+            return False, "", fallback
+    except Exception as e:
+        print(f"[brand_validator] LLM validation error: {e}")
+        return True, t.title(), ""
+
+
+# ============================================================
+# CAR MODEL VALIDATOR & CLEANER
+# ============================================================
+
+def validate_and_clean_car_model(text: str) -> tuple[bool, str, str]:
+    """
+    Validates if the user input represents a valid/meaningful car model name.
+    Returns: (is_valid, clean_model, fallback_message)
+    """
+    t = text.strip()
+    if not t:
+        return False, "", "⚠️ I didn't receive a model name. Could you please type your car's model? 🚗"
+    
+    t_lower = t.lower()
+    
+    # 1. Repeating characters check
+    if len(t) > 1 and len(set(t_lower)) == 1:
+        return False, "", "⚠️ That doesn't seem to be a valid car model. Please type the correct model name (e.g., Swift, Creta, Nexon): 🚗"
+        
+    # 2. Too short or contains special symbols only
+    import re
+    if len(t) < 2 or not re.match(r"^[A-Za-z0-9\s\-]+$", t):
+        return False, "", "⚠️ That doesn't seem to be a valid car model. Please type the correct model name (e.g., Swift, Creta, Nexon): 🚗"
+        
+    # 3. Known common greeting/refusal words
+    refusal_words = {"no", "yes", "stop", "cancel", "bye", "hi", "hello", "hey", "test", "dummy", "none", "na", "n/a", "ok", "okay", "i don't know", "skip"}
+    if t_lower in refusal_words:
+        return False, "", "⚠️ Please type a valid car model (e.g., Swift, Creta, Nexon): 🚗"
+
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a professional automotive model validator for an automotive chatbot. Respond ONLY with a valid JSON object."
+        },
+        {
+            "role": "user",
+            "content": f"""Analyze the user input to determine if it represents a valid, real-world automotive model.
+User Input: "{t}"
+
+Rules:
+1. is_valid (boolean): True if it is a real automotive model (e.g. Swift, Creta, Nexon, City, Fortuner, Thar, Scorpio, i20, Alto, etc.) or a realistic car model name, or if a realistic car model can be extracted. False if it is gibberish/random letters, digital noise, special symbols (e.g. M%, @model), placeholder names, or conversational filler with no model.
+2. clean_model (string or null): Properly capitalized model name. Null if invalid.
+3. fallback_message (string or null): A polite, professional fallback message asking for their correct car model name if invalid. Null if valid.
+
+Return JSON format:
+{{"is_valid": true/false, "clean_model": "extracted_model" or null, "fallback_message": "message" or null}}"""
+        }
+    ]
+    
+    try:
+        from llm_config import smart_llm_call
+        result = smart_llm_call(
+            messages=messages,
+            temperature=0.1,
+            max_tokens=150,
+            response_format={"type": "json_object"},
+            as_json=True
+        )
+        is_valid = result.get("is_valid", False)
+        clean_model = result.get("clean_model")
+        fallback = result.get("fallback_message")
+        
+        if is_valid and clean_model:
+            return True, clean_model, ""
+        else:
+            if not fallback:
+                fallback = "⚠️ That doesn't seem to be a valid car model. Please type the correct model name (e.g., Swift, Creta, Nexon): 🚗"
+            return False, "", fallback
+    except Exception as e:
+        print(f"[model_validator] LLM validation error: {e}")
+        return True, t.title(), ""

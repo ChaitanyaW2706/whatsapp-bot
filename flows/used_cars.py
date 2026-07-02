@@ -130,7 +130,7 @@ Has Brand Selected: {has_brand}
 """
         
         # System prompt for intent detection
-        system_prompt = """You are an AI intent detector for a used car chatbot called Sherpa Hyundai Used Cars.
+        system_prompt = """You are an AI intent detector for a used car chatbot called AutoSherpa Used Cars.
 
 Your task: Analyze the user's message and determine their INTENT based on the available options in the used cars flow.
 
@@ -230,7 +230,7 @@ def handle_used_cars(phone):
 
     send_list_message(
         phone,
-        "Hello! 👋 Welcome to *Sherpa Hyundai Used Cars*.\n"
+        "Hello! 👋 Welcome to *AutoSherpa Multibrand Used Cars*.\n"
         "I'm here to help you find your perfect used car. How can I assist you today?",
         "Select",
         sections
@@ -310,7 +310,7 @@ def _used_route_via_ai(phone, text, state):
             {"id": "END_CONVERSATION",       "title": "👋 End Conversation"}
         ]}]
         send_list_message(phone,
-            "Hello! 👋 Welcome to *Sherpa Hyundai Used Cars*.\n"
+            "Hello! 👋 Welcome to *AutoSherpa Multibrand Used Cars*.\n"
             "How can I assist you today?", "Select", sections)
 
     # Step 2 ─ Execute
@@ -487,7 +487,7 @@ def get_total_cars_count(min_price, max_price, car_type, brand):
     query = """
         SELECT COUNT(*)
         FROM carstockdata
-        WHERE LOWER(ready_for_sales) = 'available'
+        WHERE LOWER(ready_for_sales) IN ('available', 'yes')
           AND estimated_selling_price BETWEEN %s AND %s
     """
     params = [min_price, max_price]
@@ -574,7 +574,7 @@ def get_distinct_makes():
             FROM carstockdata 
             WHERE make IS NOT NULL 
               AND TRIM(make) != ''
-              AND LOWER(ready_for_sales) = 'available'
+              AND LOWER(ready_for_sales) IN ('available', 'yes')
             ORDER BY make
         """)
         makes = [row[0] for row in cur.fetchall() if row[0]]
@@ -596,7 +596,7 @@ def get_models_for_make(make_name):
             WHERE LOWER(make) = LOWER(%s) 
               AND model IS NOT NULL 
               AND TRIM(model) != ''
-              AND LOWER(ready_for_sales) = 'available'
+              AND LOWER(ready_for_sales) IN ('available', 'yes')
             ORDER BY model
         """, (make_name,))
         models = [row[0] for row in cur.fetchall() if row[0]]
@@ -608,24 +608,8 @@ def get_models_for_make(make_name):
         return []
 
 def get_distinct_years():
-    """Fetch distinct manufacturing years from database."""
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT DISTINCT manufacturing_year 
-            FROM carstockdata 
-            WHERE manufacturing_year IS NOT NULL
-              AND LOWER(ready_for_sales) = 'available'
-            ORDER BY manufacturing_year DESC
-        """)
-        years = [str(row[0]) for row in cur.fetchall() if row[0]]
-        cur.close()
-        conn.close()
-        return years[:7]  # Return top 7 years
-    except Exception as e:
-        print(f"Error fetching distinct years: {e}")
-        return ["2024", "2023", "2022", "2021", "2020"]
+    """Return distinct manufacturing years for valuation."""
+    return ["2026", "2025", "2024", "2023", "2022", "2021", "2020"]
 
 def get_distinct_fuel_types():
     """Fetch distinct fuel types from database."""
@@ -637,7 +621,7 @@ def get_distinct_fuel_types():
             FROM carstockdata 
             WHERE fuel_type IS NOT NULL 
               AND TRIM(fuel_type) != ''
-              AND LOWER(ready_for_sales) = 'available'
+              AND LOWER(ready_for_sales) IN ('available', 'yes')
             ORDER BY fuel_type
         """)
         fuel_types = [row[0] for row in cur.fetchall() if row[0]]
@@ -658,7 +642,7 @@ def get_distinct_transmission_types():
             FROM carstockdata 
             WHERE transmission_type IS NOT NULL 
               AND TRIM(transmission_type) != ''
-              AND LOWER(ready_for_sales) = 'available'
+              AND LOWER(ready_for_sales) IN ('available', 'yes')
             ORDER BY transmission_type
         """)
         transmissions = [row[0] for row in cur.fetchall() if row[0]]
@@ -690,7 +674,7 @@ def get_types_for_budget(min_price, max_price):
         SELECT DISTINCT `type`
         FROM carstockdata
         WHERE estimated_selling_price BETWEEN %s AND %s
-          AND LOWER(ready_for_sales) = 'available'
+          AND LOWER(ready_for_sales) IN ('available', 'yes')
           AND IFNULL(TRIM(`type`), '') != ''
         ORDER BY `type`
     """, (min_price, max_price))
@@ -709,7 +693,7 @@ def get_brands_for_budget_and_type(min_price, max_price, car_type):
             SELECT DISTINCT make
             FROM carstockdata
             WHERE estimated_selling_price BETWEEN %s AND %s
-              AND LOWER(ready_for_sales) = 'available'
+              AND LOWER(ready_for_sales) IN ('available', 'yes')
               AND IFNULL(TRIM(make), '') != ''
             ORDER BY make
         """, (min_price, max_price))
@@ -719,7 +703,7 @@ def get_brands_for_budget_and_type(min_price, max_price, car_type):
             FROM carstockdata
             WHERE estimated_selling_price BETWEEN %s AND %s
               AND LOWER(`type`) = LOWER(%s)
-              AND LOWER(ready_for_sales) = 'available'
+              AND LOWER(ready_for_sales) IN ('available', 'yes')
               AND IFNULL(TRIM(make), '') != ''
             ORDER BY make
         """, (min_price, max_price, car_type))
@@ -735,11 +719,9 @@ def get_cars_for_filters(min_price, max_price, car_type, brand, limit=5, offset=
     cur = conn.cursor(dictionary=True)
 
     query = """
-        SELECT serial_number, make, model, variant, manufacturing_year,
-               fuel_type, mileage_km, transmission_type,
-               estimated_selling_price, image_url
+        SELECT *
         FROM carstockdata
-        WHERE LOWER(ready_for_sales) = 'available'
+        WHERE LOWER(ready_for_sales) IN ('available', 'yes')
           AND estimated_selling_price BETWEEN %s AND %s
     """
     params = [min_price, max_price]
@@ -837,7 +819,7 @@ def handle_call_now(phone):
 
 def handle_callback_time_selection(phone, text):
     """Handle callback time selection"""
-    from webhook import send_whatsapp_message
+    from webhook import send_whatsapp_message, send_button_message
     
     time_map = {
         "CALLBACK_MORNING": "Morning (9-12)",
@@ -846,6 +828,17 @@ def handle_callback_time_selection(phone, text):
     }
     
     if text in time_map:
+        from utils import is_slot_available_today
+        # Callbacks are always same-day, so check if it has already passed
+        if not is_slot_available_today(text, time_map[text]):
+            send_whatsapp_message(phone, "⚠️ That time slot has already passed for today. Please choose an available slot:")
+            buttons = [
+                {"type": "reply", "reply": {"id": "CALLBACK_MORNING", "title": "Morning (9-12 PM)"}},
+                {"type": "reply", "reply": {"id": "CALLBACK_AFTERNOON", "title": "Afternoon (12-4 PM)"}},
+                {"type": "reply", "reply": {"id": "CALLBACK_EVENING", "title": "Evening (4-8 PM)"}}
+            ]
+            send_button_message(phone, "What's the best time to reach you?", buttons)
+            return
         USER_STATE[phone]["callback_time"] = time_map[text]
         USER_STATE[phone]["state"] = "USED_CALLBACK_COLLECT_NAME"
         send_whatsapp_message(
@@ -859,10 +852,15 @@ def handle_callback_time_selection(phone, text):
 def handle_callback_name(phone, text):
     """Handle callback name collection"""
     from webhook import send_whatsapp_message
+    from utils import validate_and_clean_name
     
-    USER_STATE[phone]["callback_name"] = text.strip()
-    USER_STATE[phone]["state"] = "USED_CALLBACK_COLLECT_PHONE"
-    send_whatsapp_message(phone, "2. Phone Number:")
+    is_valid, clean_name, fallback_msg = validate_and_clean_name(text)
+    if is_valid:
+        USER_STATE[phone]["callback_name"] = clean_name
+        USER_STATE[phone]["state"] = "USED_CALLBACK_COLLECT_PHONE"
+        send_whatsapp_message(phone, "2. Phone Number:")
+    else:
+        send_whatsapp_message(phone, fallback_msg)
 
 def handle_callback_phone(phone, text):
     """Handle callback phone collection"""
@@ -940,7 +938,7 @@ def handle_callback_need(phone, text):
         f"📍 Visit: Main Showroom – Bangalore\n"
         f"Address: 123 MG Road, Bangalore - 560001\n\n"
 
-        f"Thank you for choosing Sherpa Hyundai! 😊"
+        f"Thank you for choosing AutoSherpa! 😊"
     )
 
     send_whatsapp_message(phone, confirmation)
@@ -980,7 +978,7 @@ def handle_visit_showroom(phone):
     showroom_message = (
         "We'd love to welcome you! Here are our locations:\n\n"
 
-        "📍 *SHERPA HYUNDAI LOCATIONS:*\n\n"
+        "📍 *AUTOSHERPA LOCATIONS:*\n\n"
 
         "🏢 Main Showroom - Bangalore\n"
         "📍 Address: 123 MG Road, Bangalore - 560001\n"
@@ -1536,7 +1534,7 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
 
             send_whatsapp_message(
                 phone,
-                "👋 Thank you for using Sherpa Hyundai Used Cars!\n\n"
+                "👋 Thank you for using AutoSherpa Used Cars!\n\n"
                 "Conversation ended.\n\n"
                 "Type *Hi* or *Start* to begin again anytime."
             )
@@ -1785,6 +1783,8 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
                 log_valuation_selection(phone, "exch_cur_model", text.strip())
                 USER_STATE[phone]["state"] = "EXCH_YEAR"
                 year_rows = [
+                    {"id": "EXCH_YEAR_2026", "title": "2026"},
+                    {"id": "EXCH_YEAR_2025", "title": "2025"},
                     {"id": "EXCH_YEAR_2024", "title": "2024"},
                     {"id": "EXCH_YEAR_2023", "title": "2023"},
                     {"id": "EXCH_YEAR_2022", "title": "2022"},
@@ -1809,6 +1809,8 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
         # HARDCODED YEAR OPTIONS
         # ========================================
         year_rows = [
+            {"id": "EXCH_YEAR_2026", "title": "2026"},
+            {"id": "EXCH_YEAR_2025", "title": "2025"},
             {"id": "EXCH_YEAR_2024", "title": "2024"},
             {"id": "EXCH_YEAR_2023", "title": "2023"},
             {"id": "EXCH_YEAR_2022", "title": "2022"},
@@ -1830,6 +1832,8 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
             USER_STATE[phone]["state"] = "EXCH_YEAR"
             
             year_rows = [
+                {"id": "EXCH_YEAR_2026", "title": "2026"},
+                {"id": "EXCH_YEAR_2025", "title": "2025"},
                 {"id": "EXCH_YEAR_2024", "title": "2024"},
                 {"id": "EXCH_YEAR_2023", "title": "2023"},
                 {"id": "EXCH_YEAR_2022", "title": "2022"},
@@ -1845,6 +1849,8 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
     # Q3 — Year
     if state == "EXCH_YEAR":
         year_map = {
+            "EXCH_YEAR_2026": "2026",
+            "EXCH_YEAR_2025": "2025",
             "EXCH_YEAR_2024": "2024",
             "EXCH_YEAR_2023": "2023",
             "EXCH_YEAR_2022": "2022",
@@ -2145,6 +2151,7 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
             {"id": "EXCH_DOC_RC", "title": "RC available"},
             {"id": "EXCH_DOC_INS", "title": "Insurance copy available"},
             {"id": "EXCH_DOC_SERVICE", "title": "Service history"},
+            {"id": "EXCH_DOC_FEW", "title": "Few documents available"},
             {"id": "EXCH_DOC_ALL", "title": "All documents available"}
         ]
         
@@ -2158,6 +2165,7 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
             "EXCH_DOC_RC": "RC available",
             "EXCH_DOC_INS": "Insurance copy available",
             "EXCH_DOC_SERVICE": "Service history",
+            "EXCH_DOC_FEW": "Few documents available",
             "EXCH_DOC_ALL": "All documents available"
         }
 
@@ -2165,6 +2173,8 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
             t = text.strip().lower()
             if "all" in t or "everything" in t or "complete" in t:
                 text = "EXCH_DOC_ALL"
+            elif "few" in t or "some" in t or "1 or" in t:
+                text = "EXCH_DOC_FEW"
             elif "rc" in t or "registration" in t:
                 text = "EXCH_DOC_RC"
             elif "insurance" in t or "ins" in t:
@@ -2568,7 +2578,7 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
             return
         elif text == "EXCH_LOC_SHOWROOM":
             USER_STATE[phone]["exch_td_loc_type"] = "Showroom Visit"
-            USER_STATE[phone]["exch_td_address"] = "Sherpa Hyundai Showroom"
+            USER_STATE[phone]["exch_td_address"] = "AutoSherpa Showroom"
             log_valuation_selection(phone, "exch_td_location_type", "Showroom Visit")
             USER_STATE[phone]["state"] = "EXCH_TD_WHEN"
             from datetime import datetime as _dt_now
@@ -2592,9 +2602,16 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
         if is_genuine_query(text, state):
             _used_route_via_ai(phone, text, state)
         else:
-            USER_STATE[phone]["exch_td_address"] = text.strip()
-            log_valuation_selection(phone, "exch_td_address", text.strip())
-            USER_STATE[phone]["state"] = "EXCH_TD_WHEN"
+            from utils import validate_and_clean_location
+            is_valid, clean_loc, fallback_msg = validate_and_clean_location(text)
+            if is_valid:
+                USER_STATE[phone]["exch_td_address"] = clean_loc
+                log_valuation_selection(phone, "exch_td_address", clean_loc)
+                USER_STATE[phone]["state"] = "EXCH_TD_WHEN"
+            else:
+                send_whatsapp_message(phone, fallback_msg)
+                return
+
             from datetime import datetime as _dt_now2
             _now2 = _dt_now2.now()
             rows = []
@@ -2713,7 +2730,6 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
             _used_route_via_ai(phone, text, state)
         return
 
-    # Q20 — Time slot → Q21 name + city
     if state == "EXCH_TD_TIME":
         time_map = {
             "EXCH_TIME_MORNING": "Morning (10-12)",
@@ -2722,6 +2738,16 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
         }
         
         if text in time_map:
+            from utils import is_booking_date_today, is_slot_available_today
+            if is_booking_date_today(phone) and not is_slot_available_today(text, time_map[text]):
+                send_whatsapp_message(phone, "⚠️ That time slot has already passed for today. Please choose an available slot:")
+                buttons = [
+                    {"type": "reply", "reply": {"id": "EXCH_TIME_MORNING", "title": "Morning (10-12)"}},
+                    {"type": "reply", "reply": {"id": "EXCH_TIME_AFTERNOON", "title": "Afternoon (12-3)"}},
+                    {"type": "reply", "reply": {"id": "EXCH_TIME_EVENING", "title": "Evening (3-6)"}},
+                ]
+                send_button_message(phone, "Please choose a time slot:", buttons)
+                return
             USER_STATE[phone]["exch_td_time"] = time_map[text]
             log_valuation_selection(phone, "exch_td_time", time_map[text])
             USER_STATE[phone]["state"] = "EXCH_COLLECT_NAME"
@@ -2735,20 +2761,32 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
         if is_genuine_query(text, state):
             _used_route_via_ai(phone, text, state)
         else:
-            USER_STATE[phone]["exch_name"] = text.strip()
-            USER_STATE[phone]["exch_phone"] = str(phone)[-10:]
-            log_valuation_selection(phone, "exch_name", text.strip())
-            USER_STATE[phone]["state"] = "EXCH_COLLECT_CITY"
-            send_whatsapp_message(phone, "City:")
+            from utils import validate_and_clean_name
+            is_valid, clean_name, fallback_msg = validate_and_clean_name(text)
+            if is_valid:
+                USER_STATE[phone]["exch_name"] = clean_name
+                USER_STATE[phone]["exch_phone"] = str(phone)[-10:]
+                log_valuation_selection(phone, "exch_name", clean_name)
+                USER_STATE[phone]["state"] = "EXCH_COLLECT_CITY"
+                send_whatsapp_message(phone, "City:")
+            else:
+                send_whatsapp_message(phone, fallback_msg)
         return
 
     # City → Save + Final Confirmation
     if state == "EXCH_COLLECT_CITY":
         if is_genuine_query(text, state):
             _used_route_via_ai(phone, text, state)
+            return
         else:
-            USER_STATE[phone]["exch_city"] = text.strip()
-            log_valuation_selection(phone, "exch_city", text.strip())
+            from utils import validate_and_clean_location
+            is_valid, clean_loc, fallback_msg = validate_and_clean_location(text)
+            if is_valid:
+                USER_STATE[phone]["exch_city"] = clean_loc
+                log_valuation_selection(phone, "exch_city", clean_loc)
+            else:
+                send_whatsapp_message(phone, fallback_msg)
+                return
 
         # ── Save to DB ──────────────────────────────────────────────────
         try:
@@ -2820,7 +2858,7 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
             f"🚗 Car: {cur_car}\n"
             f"📍 Location: {USER_STATE[phone].get('exch_city', '')}\n\n"
             f"📞 Questions? Call: +91-9876543210\n\n"
-            f"Thank you for choosing Sherpa Hyundai! 😊"
+            f"Thank you for choosing AutoSherpa! 😊"
         )
 
         send_whatsapp_message(phone, confirmation_message)
@@ -3489,10 +3527,15 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
         if is_genuine_query(text, state):
             _used_route_via_ai(phone, text, state)
         else:
-            USER_STATE[phone]["valuation_name"] = text.strip()
-            USER_STATE[phone]["valuation_phone"] = str(phone)[-10:]
-            USER_STATE[phone]["state"] = "USED_VALUATION_COLLECT_LOCATION"
-            send_whatsapp_message(phone, "Current Location/City:")
+            from utils import validate_and_clean_name
+            is_valid, clean_name, fallback_msg = validate_and_clean_name(text)
+            if is_valid:
+                USER_STATE[phone]["valuation_name"] = clean_name
+                USER_STATE[phone]["valuation_phone"] = str(phone)[-10:]
+                USER_STATE[phone]["state"] = "USED_VALUATION_COLLECT_LOCATION"
+                send_whatsapp_message(phone, "Current Location/City:")
+            else:
+                send_whatsapp_message(phone, fallback_msg)
         return
     
     if state == "USED_VALUATION_COLLECT_LOCATION":
@@ -3500,7 +3543,13 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
             _used_route_via_ai(phone, text, state)
             return
         else:
-            USER_STATE[phone]["valuation_location"] = text.strip()
+            from utils import validate_and_clean_location
+            is_valid, clean_loc, fallback_msg = validate_and_clean_location(text)
+            if is_valid:
+                USER_STATE[phone]["valuation_location"] = clean_loc
+            else:
+                send_whatsapp_message(phone, fallback_msg)
+                return
 
             # ===============================
             # SAVE TO DATABASE
@@ -3566,7 +3615,7 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
                 f"📅 Selling Timeline: {USER_STATE[phone].get('valuation_timeline', 'N/A')}\n"
                 f"📍 Location: {USER_STATE[phone]['valuation_location']}\n\n"
                 f"📞 Questions? Call: +91-9876543210\n\n"
-                f"Thank you for choosing Sherpa Hyundai! 😊"
+                f"Thank you for choosing AutoSherpa! 😊"
             )
 
             send_whatsapp_message(phone, confirmation_message)
@@ -3880,10 +3929,31 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
                 resolved_slot = "USED_TIME_MORNING"   # default to morning for anytime
 
             if resolved_slot:
+                from utils import is_booking_date_today, is_slot_available_today
+                if is_booking_date_today(phone) and not is_slot_available_today(resolved_slot, time_map[resolved_slot]):
+                    send_whatsapp_message(phone, "⚠️ That time slot has already passed for today. Please choose an available slot:")
+                    buttons = [
+                        {"type": "reply", "reply": {"id": "USED_TIME_MORNING",   "title": "Morning (10AM-12PM)"}},
+                        {"type": "reply", "reply": {"id": "USED_TIME_AFTERNOON", "title": "Afternoon (12PM-4PM)"}},
+                        {"type": "reply", "reply": {"id": "USED_TIME_EVENING",   "title": "Evening (4PM-7PM)"}}
+                    ]
+                    send_button_message(phone, "Perfect! Which time works best for you?", buttons)
+                    return
                 text = resolved_slot
                 send_whatsapp_message(phone, f"✅ Got it — *{time_map[resolved_slot]}*.")
             else:
                 _used_route_via_ai(phone, text, state)
+                return
+        else:
+            from utils import is_booking_date_today, is_slot_available_today
+            if is_booking_date_today(phone) and not is_slot_available_today(text, time_map[text]):
+                send_whatsapp_message(phone, "⚠️ That time slot has already passed for today. Please choose an available slot:")
+                buttons = [
+                    {"type": "reply", "reply": {"id": "USED_TIME_MORNING",   "title": "Morning (10AM-12PM)"}},
+                    {"type": "reply", "reply": {"id": "USED_TIME_AFTERNOON", "title": "Afternoon (12PM-4PM)"}},
+                    {"type": "reply", "reply": {"id": "USED_TIME_EVENING",   "title": "Evening (4PM-7PM)"}}
+                ]
+                send_button_message(phone, "Perfect! Which time works best for you?", buttons)
                 return
 
         USER_STATE[phone]["test_drive_time"] = time_map[text]
@@ -3896,15 +3966,20 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
         if is_genuine_query(text, state):
             _used_route_via_ai(phone, text, state)
         else:
-            USER_STATE[phone]["customer_name"] = text.strip()
-            USER_STATE[phone]["customer_phone"] = str(phone)[-10:]
-            USER_STATE[phone]["state"] = "USED_BOOK_COLLECT_LICENSE"
+            from utils import validate_and_clean_name
+            is_valid, clean_name, fallback_msg = validate_and_clean_name(text)
+            if is_valid:
+                USER_STATE[phone]["customer_name"] = clean_name
+                USER_STATE[phone]["customer_phone"] = str(phone)[-10:]
+                USER_STATE[phone]["state"] = "USED_BOOK_COLLECT_LICENSE"
 
-            buttons = [
-                {"type": "reply", "reply": {"id": "LICENSE_YES", "title": "✅ Yes"}},
-                {"type": "reply", "reply": {"id": "LICENSE_NO", "title": "❌ No"}}
-            ]
-            send_button_message(phone, "2. Do you have a valid driving license?", buttons)
+                buttons = [
+                    {"type": "reply", "reply": {"id": "LICENSE_YES", "title": "✅ Yes"}},
+                    {"type": "reply", "reply": {"id": "LICENSE_NO", "title": "❌ No"}}
+                ]
+                send_button_message(phone, "2. Do you have a valid driving license?", buttons)
+            else:
+                send_whatsapp_message(phone, fallback_msg)
         return
     
     if state == "USED_BOOK_COLLECT_LICENSE":
@@ -3944,7 +4019,7 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
     if state == "USED_BOOK_SELECT_LOCATION_TYPE":
         if text == "FROM_SHOWROOM":
             USER_STATE[phone]["location_type"] = "showroom"
-            USER_STATE[phone]["location"] = "Sherpa Hyundai - Main Showroom, 123 MG Road, Bangalore"
+            USER_STATE[phone]["location"] = "AutoSherpa - Main Showroom, 123 MG Road, Bangalore"
             
             # Fetch car details
             conn = get_db_connection()
@@ -3989,7 +4064,13 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
             _used_route_via_ai(phone, text, state)
             return
         
-        USER_STATE[phone]["location"] = text.strip()
+        from utils import validate_and_clean_location
+        is_valid, clean_loc, fallback_msg = validate_and_clean_location(text)
+        if is_valid:
+            USER_STATE[phone]["location"] = clean_loc
+        else:
+            send_whatsapp_message(phone, fallback_msg)
+            return
         
         # Build and send the booking details message first
         name = USER_STATE[phone]["customer_name"]
@@ -4013,17 +4094,16 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
         else:
             car_display = USER_STATE[phone]["selected_used_car_name"]
 
-        date = USER_STATE[phone]["test_drive_date"]
+        test_drive_date = USER_STATE[phone]["test_drive_date"]
         time = USER_STATE[phone]["test_drive_time"]
         location = USER_STATE[phone]["location"]
         
         # Format date
         try:
-            from datetime import datetime
-            date_obj = datetime.strptime(date, "%d-%m-%Y")
+            date_obj = datetime.strptime(test_drive_date, "%d-%m-%Y")
             formatted_date = date_obj.strftime("%A, %d %b %Y")
         except:
-            formatted_date = date
+            formatted_date = test_drive_date
         
         booking_details = (
             "Please confirm your test drive details:\n\n"
@@ -4034,7 +4114,7 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
             f"⏰ Time: {time}\n"
             f"📍 Location: {location}\n\n"
             "📍 Showroom Address:\n"
-            "🏢 Sherpa Hyundai - Main Showroom\n"
+            "🏢 AutoSherpa - Main Showroom\n"
             "Address:123 MG Road, Bangalore - 560001\n"
             "📞 Phone: +91-9876543210\n"
             "🕒 Timings: Mon-Sat: 9AM-8PM, Sun: 10AM-6PM\n"
@@ -4081,7 +4161,7 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
             name = USER_STATE[phone]["customer_name"]
             phone_number = USER_STATE[phone]["customer_phone"]
             car_name = USER_STATE[phone]["selected_used_car_name"]
-            date = USER_STATE[phone]["test_drive_date"]
+            test_drive_date = USER_STATE[phone]["test_drive_date"]
             time = USER_STATE[phone]["test_drive_time"]
             location = USER_STATE[phone]["location"]
             license_status = USER_STATE[phone]["license"]
@@ -4103,7 +4183,7 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
                     phone_number,
                     license_status,
                     USER_STATE[phone]["selected_used_car_id"],
-                    date,
+                    test_drive_date,
                     time,
                     location
                 ))
@@ -4201,32 +4281,54 @@ If not a budget: {{"id": "NONE", "confidence": 0.0}}"""
 
 def extract_gridfs_image(url_path, prefix):
     if not url_path: return None
-    if url_path.startswith("http"): return url_path
-    if not url_path.startswith("/images/"): return None
+    from config import BASE_URL
     
-    try:
-        from pymongo import MongoClient
-        from bson.objectid import ObjectId
-        import gridfs
-        import os
-        from config import MONGO_URI, BASE_URL
-        
-        file_id = url_path.split("/")[-1]
-        client = MongoClient(MONGO_URI)
-        db = client["whatsapp_bot"]
-        fs = gridfs.GridFS(db)
-        
-        grid_out = fs.get(ObjectId(file_id))
-        os.makedirs("static/cars", exist_ok=True)
-        filename = f"{prefix}_{file_id}.jpg"
-        filepath = os.path.join("static", "cars", filename)
-        with open(filepath, "wb") as f:
-            f.write(grid_out.read())
-        return f"{BASE_URL}/static/cars/{filename}"
-    except Exception as e:
-        print(f"Error extracting GridFS image: {e}")
+    if "/images/" in url_path:
+        file_id = url_path.split("/images/")[1].split("/")[0]
+        return f"{BASE_URL.rstrip('/')}/db_image/{file_id}"
+    else:
+        if url_path.startswith("http"): return url_path
         return None
 
+def download_and_serve_image(url, prefix):
+    # Simply return the URL instead of downloading to static folder
+    if not url or not url.startswith("http"): return url
+    return url
+
+def _parse_image_urls(raw_val):
+    import json
+    if not raw_val: return []
+    raw_list = []
+    try:
+        if isinstance(raw_val, str) and raw_val.startswith("{"):
+            raw_list = list(json.loads(raw_val).values())
+        elif isinstance(raw_val, str) and raw_val.startswith("["):
+            raw_list = json.loads(raw_val)
+        else:
+            raw_list = [raw_val]
+    except:
+        raw_list = [raw_val]
+        
+    final_urls = []
+    for item in raw_list:
+        if isinstance(item, str):
+            for u in item.split(","):
+                u = u.strip()
+                if u:
+                    final_urls.append(u)
+    return final_urls
+
+def format_indian_currency(num):
+    s = str(num)
+    if len(s) <= 3:
+        return s
+    last_three = s[-3:]
+    other = s[:-3]
+    res = []
+    while len(other) > 0:
+        res.append(other[-2:])
+        other = other[:-2]
+    return ",".join(res[::-1]) + "," + last_three
 def _show_used_cars(phone):
     from webhook import send_whatsapp_message, send_whatsapp_image, send_button_message
     import time
@@ -4262,31 +4364,34 @@ def _show_used_cars(phone):
     # SHOW CARS
     # ─────────────────────────────────────
     for car in cars:
-        import json
-        raw_image = car.get("image_url") or ""
-        images = []
-        try:
-            if raw_image.startswith("{"):
-                images = list(json.loads(raw_image).values())
-            elif raw_image.startswith("["):
-                images = json.loads(raw_image)
-            else:
-                images = [i.strip() for i in raw_image.split(",") if i.strip()]
-        except:
-            images = [raw_image]
-            
         valid_images = []
-        for img in images:
-            if img.startswith("/images/"):
-                extracted = extract_gridfs_image(img, f"used_{car['serial_number']}")
-                if extracted:
+        
+        raw_image = car.get("image_url")
+        images = _parse_image_urls(raw_image)
+        for idx, img in enumerate(images):
+            suffix = f"img_{idx}" if len(images) > 1 else "img"
+            if "/images/" in img:
+                extracted = extract_gridfs_image(img, f"used_{car['serial_number']}_{suffix}")
+                if extracted and extracted not in valid_images:
                     valid_images.append(extracted)
             elif img.startswith("http"):
-                valid_images.append(img)
+                extracted = download_and_serve_image(img, f"used_{car['serial_number']}_{suffix}")
+                if extracted and extracted not in valid_images:
+                    valid_images.append(extracted)
 
-        if valid_images:
-            send_whatsapp_image(phone, valid_images[0])
-            time.sleep(2.0)
+        # Process new dedicated image columns
+        for col in ["front_view_image", "left_view_image", "right_view_image", "back_view_image", "interior_image"]:
+            col_images = _parse_image_urls(car.get(col))
+            for idx, col_img in enumerate(col_images):
+                suffix = f"{col}_{idx}" if len(col_images) > 1 else col
+                if "/images/" in col_img:
+                    extracted = extract_gridfs_image(col_img, f"used_{car['serial_number']}_{suffix}")
+                    if extracted and extracted not in valid_images:
+                        valid_images.append(extracted)
+                elif col_img.startswith("http"):
+                    extracted = download_and_serve_image(col_img, f"used_{car['serial_number']}_{suffix}")
+                    if extracted and extracted not in valid_images:
+                        valid_images.append(extracted)
 
         car_title = f"{car['make']} {car['model']} {car.get('variant', '')}".strip()
 
@@ -4295,7 +4400,7 @@ def _show_used_cars(phone):
             f"📅 Year: {car.get('manufacturing_year', '')}\n"
             f"⛽ Fuel: {car.get('fuel_type', '')}\n"
             f"📍 KM: {car.get('mileage_km', '')}\n"
-            f"💰 Price: ₹{int(car.get('estimated_selling_price') or 0):,}"
+            f"💰 Price: ₹{format_indian_currency(int(car.get('estimated_selling_price') or 0))}"
         )
 
         buttons = [
@@ -4315,7 +4420,8 @@ def _show_used_cars(phone):
             }
         ]
 
-        send_button_message(phone, details_text, buttons)
+        header_img = valid_images[0] if valid_images else None
+        send_button_message(phone, details_text, buttons, header_image_url=header_img)
         time.sleep(1.0)
 
     # ─────────────────────────────────────
@@ -4368,35 +4474,44 @@ def _show_more_images(phone, car_id):
 
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT image_url FROM carstockdata WHERE serial_number = %s", (car_id,))
+    cur.execute("SELECT * FROM carstockdata WHERE serial_number = %s", (car_id,))
     row = cur.fetchone()
     cur.close()
     conn.close()
 
-    if not row or not row.get("image_url"):
+    if not row:
         return
 
-    import json
-    raw_image = row["image_url"] or ""
-    images = []
-    try:
-        if raw_image.startswith("{"):
-            images = list(json.loads(raw_image).values())
-        elif raw_image.startswith("["):
-            images = json.loads(raw_image)
-        else:
-            images = [i.strip() for i in raw_image.split(",") if i.strip()]
-    except:
-        images = [raw_image]
+    raw_image = row.get("image_url")
+    images = _parse_image_urls(raw_image)
         
     valid_images = []
-    for i, img in enumerate(images):
-        if img.startswith("/images/"):
-            extracted = extract_gridfs_image(img, f"used_{car_id}_{i}")
-            if extracted:
+    for idx, img in enumerate(images):
+        suffix = f"img_{idx}" if len(images) > 1 else "img"
+        if "/images/" in img:
+            extracted = extract_gridfs_image(img, f"used_{car_id}_{suffix}")
+            if extracted and extracted not in valid_images:
                 valid_images.append(extracted)
         elif img.startswith("http"):
-            valid_images.append(img)
+            extracted = download_and_serve_image(img, f"used_{car_id}_{suffix}")
+            if extracted and extracted not in valid_images:
+                valid_images.append(extracted)
+
+    for col in ["front_view_image", "left_view_image", "right_view_image", "back_view_image", "interior_image"]:
+        col_images = _parse_image_urls(row.get(col))
+        for idx, img_val in enumerate(col_images):
+            suffix = f"{col}_{idx}" if len(col_images) > 1 else col
+            if "/images/" in img_val:
+                extracted = extract_gridfs_image(img_val, f"used_{car_id}_{suffix}")
+                if extracted and extracted not in valid_images:
+                    valid_images.append(extracted)
+            elif img_val.startswith("http"):
+                extracted = download_and_serve_image(img_val, f"used_{car_id}_{suffix}")
+                if extracted and extracted not in valid_images:
+                    valid_images.append(extracted)
+
+    if not valid_images:
+        return
 
     # 🔥 Store current car for back button
     USER_STATE[phone]["last_viewed_car_id"] = car_id
